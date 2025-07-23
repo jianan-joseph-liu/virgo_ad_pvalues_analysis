@@ -1,0 +1,2 @@
+[console_scripts]
+sgvb_benchmark = sgvb_psd.utils.benchmark.cli:cli

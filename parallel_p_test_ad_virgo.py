@@ -2,8 +2,7 @@ import numpy as np
 import sys
 from gwpy.timeseries import TimeSeries
 from gwpy.segments import DataQualityFlag
-import scipy.signal as sig
-from spectrum import aryule, arma2psd
+#import scipy.signal as sig
 from src.sgvb_psd.psd_estimator import PSDEstimator
 from statsmodels.stats.diagnostic import normal_ad
 import h5py
@@ -243,6 +242,7 @@ with h5py.File(f"virgo_ARSGVB_segment_{segment_id}_results.h5", "w") as hf:
     hf.create_dataset("ad_pvalues_N01", data=pvalues_N01)
     hf.create_dataset("rayleigh_test", data=rayleigh)
     hf.create_dataset("final_psd", data=final_psd)
+
 
 
 

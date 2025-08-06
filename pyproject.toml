@@ -11,13 +11,13 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]  # list of folders that contain the packages (["."] by default)
-include = ["sgvb_psd*"]  # package names should match these glob patterns (["*"] by default)
-exclude = ["sgvb_psd.tests*"]  # exclude packages matching these glob patterns (empty by default)
+include = ["sgvb_univar*"]  # package names should match these glob patterns (["*"] by default)
+exclude = ["sgvb_univar.tests*"]  # exclude packages matching these glob patterns (empty by default)
 namespaces = false  # to disable scanning PEP 420 namespaces (true by default)
 
 
 [project]
-name = "sgvb_psd"
+name = "sgvb_univar"
 dynamic = ["version"] # scm versioning (using tags)
 requires-python = ">=3.8"
 description = "A python package for estimating the power spectral density (PSD) of correlated multivariate detector noise using variational inference (VI)."
@@ -57,20 +57,21 @@ dev = [
     "black",
     "jupyter-book",
     "sphinx-inline-tabs",
-    "pytest_click"
+    "pytest_click",
+    "gwpy"
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/nz-gravity/sgvb_psd"
-"Bug Reports" = "https://github.com/nz-gravity/sgvb_psd/issues"
-"Source" = "https://github.com/nz-gravity/sgvb_psd"
-"Documentation" = "https://nz-gravity.github.io/sgvb_psd/"
+"Homepage" = "https://github.com/nz-gravity/sgvb_univar"
+"Bug Reports" = "https://github.com/nz-gravity/sgvb_univar/issues"
+"Source" = "https://github.com/nz-gravity/sgvb_univar"
+"Documentation" = "https://nz-gravity.github.io/sgvb_univar/"
 
 [tool.setuptools_scm]
-version_file = "src/sgvb_psd/_version.py"
+version_file = "src/sgvb_univar/_version.py"
 
 [tool.semantic_release]
-version_variable = "src/sgvb_psd/_version.py:__version__"
+version_variable = "src/sgvb_univar/_version.py:__version__"
 version_source = "commit"
 commit_version_number = true
 commit_subject = "chore(release): {version}"
@@ -109,4 +110,4 @@ testpaths = ["tests"]
 
 
 [project.scripts]
-sgvb_benchmark = "sgvb_psd.utils.benchmark.cli:cli"
+sgvb_benchmark = "sgvb_univar.utils.benchmark.cli:cli"

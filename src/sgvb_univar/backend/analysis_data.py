@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Tuple
+from typing import Tuple, List
 import tensorflow as tf
 #from ..logging import logger
 
@@ -9,7 +9,7 @@ class AnalysisData:  # Parent used to create BayesianModel object
             self,
             x: np.ndarray,
             nchunks: int = 128,
-            fmax_for_analysis: float = 128,
+            frange: List[float] = [],
             fs: float = 2048.,
             N_theta: int = 15,
             N_delta: int = 15
@@ -30,10 +30,10 @@ class AnalysisData:  # Parent used to create BayesianModel object
         self.N_delta = N_delta
 
         self.fs = fs
-        self.fmax_for_analysis = fmax_for_analysis
+        self.frange = frange
 
         # Compute the required datasets
-        self.y_ft, self.freq = compute_chunked_fft(self.x, self.nchunks, self.fmax_for_analysis, self.fs)
+        self.y_ft, self.freq = compute_chunked_fft(self.x, self.nchunks, self.frange, self.fs)
         self.Zar = _compute_chunked_Zmatrix(self.y_ft)
         Xmat_delta, Xmat_theta = _compute_Xmatrices(self.freq, N_delta, N_theta)
 
@@ -148,7 +148,7 @@ def DR_basis(freq: np.ndarray, N=10):
     ).T
 
 
-def compute_chunked_fft(x: np.ndarray, nchunks: int, fmax_for_analysis: float, fs: float) -> Tuple[
+def compute_chunked_fft(x: np.ndarray, nchunks: int, frange: List[float], fs: float) -> Tuple[
     np.ndarray, np.ndarray]:
     """
     Scaled fft and get the elements of freq = 1:[Nquist] (or 1:[fmax_for_analysis] if specified)
@@ -195,8 +195,10 @@ def compute_chunked_fft(x: np.ndarray, nchunks: int, fmax_for_analysis: float, f
     fq_y = fq_y[1:idx]
     ftrue_y = ftrue_y[1:idx]
 
-    if fmax_for_analysis is None:
-        fmax_for_analysis = ftrue_y[-1]
+    if frange is None:
+        frange = [ftrue_y[0], ftrue_y[-1]]
+
+
     fmax_idx = np.searchsorted(ftrue_y, fmax_for_analysis)
     y_ft = y_ft[:, 0:fmax_idx, :]
     fq_y = fq_y[0:fmax_idx]

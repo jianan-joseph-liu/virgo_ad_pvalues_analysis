@@ -21,7 +21,7 @@ class ViRunner:
             N_theta:int=30,
             nchunks:int=400,
             variation_factor:float=0.,
-            fmax_for_analysis:float=None,
+            frange: List[float] = [],
             fs:float=2048,
             degree_fluctuate:float=None,
             init_params:List[tf.Tensor]=None,
@@ -30,7 +30,7 @@ class ViRunner:
         self.data = AnalysisData(
             x=x,
             nchunks=nchunks,
-            fmax_for_analysis=fmax_for_analysis,
+            frange=frange,
             fs=fs,
             N_theta=N_theta,
             N_delta=N_theta, # N_theta == N_delta in all cases

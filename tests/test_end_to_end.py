@@ -10,7 +10,7 @@ def test_end_to_end(plot_dir):
     data = ARData(
         order=4,
         duration=4.0,
-        fs=4096.0
+        fs=2*np.pi
     )
     psd_estimator = PSDEstimator(
         x=np.array(data.ts).reshape(-1, 1),

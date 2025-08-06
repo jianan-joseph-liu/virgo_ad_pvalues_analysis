@@ -45,7 +45,8 @@ dependencies = [
     "matplotlib",
     "hyperopt",
     "colorama",
-    'click'
+    'click',
+    "statsmodels"
 ]
 
 [project.optional-dependencies]

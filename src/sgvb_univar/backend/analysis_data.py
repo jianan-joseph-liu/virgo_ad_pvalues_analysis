@@ -148,58 +148,65 @@ def DR_basis(freq: np.ndarray, N=10):
     ).T
 
 
-def compute_chunked_fft(x: np.ndarray, nchunks: int, frange: List[float], fs: float) -> Tuple[
-    np.ndarray, np.ndarray]:
+def compute_chunked_fft(x: np.ndarray, nchunks: int, frange: List[float], fs: float) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Scaled fft and get the elements of freq = 1:[Nquist] (or 1:[fmax_for_analysis] if specified)
-    discarding the rest of freqs
-    """
+    Compute the FFT of input data split into chunks, discard DC component, and retain only
+    the positive frequencies within the specified frequency range.
 
-    #if np.any(np.mean(x, axis=0) != 0) or np.any(np.std(x, axis=0) != 1):
-    #    logger.warning("Input data not standardised!")
-    
+    Parameters:
+    ----------
+    x : np.ndarray
+        Input time-domain data of shape (n_samples, n_dim).
+    nchunks : int
+        Number of chunks to split the data into.
+    frange : List[float]
+        Frequency range [fmin, fmax] to retain after FFT (in Hz).
+    fs : float
+        Sampling frequency (Hz).
+
+    Returns:
+    -------
+    y_ft : np.ndarray
+        Chunked and scaled FFT output of shape (nchunks, n_freq, n_dim).
+    ftrue_y : np.ndarray
+        Frequencies corresponding to the retained FFT bins (in Hz).
+    """
+    if x.ndim != 2:
+        raise ValueError("Input x must be a 2D array (n_samples, n_dim).")
+    if len(frange) != 2 or frange[0] >= frange[1]:
+        raise ValueError("frange must be a list of two increasing floats [fmin, fmax].")
+
     orig_n, p = x.shape
     if orig_n < p:
         raise ValueError(f"Number of samples {orig_n} is less than number of dimensions {p}.")
-    # split x into chunks
-    n_per_chunk = x.shape[0] // nchunks
-    chunked_x = np.array(
-        np.split(x[0: n_per_chunk * nchunks, :], nchunks)
-    )
-    assert chunked_x.shape == (nchunks, n_per_chunk, p)
 
-    chunked_x = chunked_x - np.mean(chunked_x, axis=1, keepdims=True)
+    # Split x into chunks
+    n_per_chunk = orig_n // nchunks
+    x = x[:nchunks * n_per_chunk]  # truncate to make evenly divisible
+    chunked_x = x.reshape(nchunks, n_per_chunk, p)
 
-    # compute fft for each chunk
-    y_ft = np.apply_along_axis(np.fft.fft, 1, chunked_x)
-    #
-    # y = []
-    # for i in range(nchunks):
-    #     y_fft = np.apply_along_axis(np.fft.fft, 0, chunked_x[i])
-    #     y.append(y_fft)
-    # y = np.array(y)
+    # Remove mean from each chunk
+    chunked_x -= np.mean(chunked_x, axis=1, keepdims=True)
 
-    # scale it
-    y_ft = y_ft / np.sqrt(n_per_chunk)
-    Ts = 1  # for VB backend we use Duration of 1.0 (rescale later)
-    fq_y = np.fft.fftfreq(np.size(chunked_x, axis=1), Ts)
+    # FFT along time axis (axis=1)
+    y_ft = np.fft.fft(chunked_x, axis=1) / np.sqrt(n_per_chunk)
+
+    # Frequency axes
     ftrue_y = np.fft.fftfreq(n_per_chunk, d=1 / fs)
 
-    # Truncate the FFT'd data
-    if np.mod(n_per_chunk, 2) == 0:  # n is even
-        idx = int(n_per_chunk / 2)
-    else:  # n is odd
-        idx = int((n_per_chunk - 1) / 2)
+    # Keep only positive frequencies (excluding DC)
+    if n_per_chunk % 2 == 0:
+        idx = n_per_chunk // 2
+    else:
+        idx = (n_per_chunk - 1) // 2
 
-    y_ft = y_ft[:, 1:idx, :]
-    fq_y = fq_y[1:idx]
     ftrue_y = ftrue_y[1:idx]
+    y_ft = y_ft[:, 1:idx, :]
 
-    if frange is None:
-        frange = [ftrue_y[0], ftrue_y[-1]]
+    # Apply frequency mask based on frange
+    fmin, fmax = frange
+    mask = (ftrue_y >= fmin) & (ftrue_y <= fmax)
+    y_ft = y_ft[:, mask, :]
+    ftrue_y = ftrue_y[mask]
 
-
-    fmax_idx = np.searchsorted(ftrue_y, fmax_for_analysis)
-    y_ft = y_ft[:, 0:fmax_idx, :]
-    fq_y = fq_y[0:fmax_idx]
-    return y_ft, fq_y
+    return y_ft, ftrue_y

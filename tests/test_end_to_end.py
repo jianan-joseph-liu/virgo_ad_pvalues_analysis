@@ -17,7 +17,6 @@ def test_end_to_end(plot_dir):
         N_theta=30,
         nchunks=1,
         fs=data.fs,
-        fmax_for_analysis=2048.0,
     )
     psd_all, pointwise_ci = psd_estimator.run(lr=0.03)
 

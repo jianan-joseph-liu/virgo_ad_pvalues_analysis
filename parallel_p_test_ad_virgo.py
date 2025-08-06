@@ -3,7 +3,7 @@ import sys
 from gwpy.timeseries import TimeSeries
 from gwpy.segments import DataQualityFlag
 #import scipy.signal as sig
-from src.sgvb_psd.psd_estimator import PSDEstimator
+from sgvb_univar.psd_estimator import PSDEstimator
 from statsmodels.stats.diagnostic import normal_ad
 import h5py
 import scipy.special

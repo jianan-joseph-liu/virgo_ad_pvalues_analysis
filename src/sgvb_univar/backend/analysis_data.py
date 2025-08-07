@@ -192,7 +192,9 @@ def compute_chunked_fft(x: np.ndarray, nchunks: int, frange: List[float], fs: fl
     y_ft = np.fft.fft(chunked_x, axis=1) / np.sqrt(n_per_chunk)
 
     # Frequency axes
+    Ts = 1  # for VB backend we use Duration of 1.0 (rescale later)
     ftrue_y = np.fft.fftfreq(n_per_chunk, d=1 / fs)
+    fq_y = np.fft.fftfreq(np.size(chunked_x, axis=1), Ts)
 
     # Keep only positive frequencies (excluding DC)
     if n_per_chunk % 2 == 0:
@@ -201,6 +203,7 @@ def compute_chunked_fft(x: np.ndarray, nchunks: int, frange: List[float], fs: fl
         idx = (n_per_chunk - 1) // 2
 
     ftrue_y = ftrue_y[1:idx]
+    fq_y = fq_y[1:idx]
     y_ft = y_ft[:, 1:idx, :]
 
     # Apply frequency mask based on frange
@@ -208,5 +211,6 @@ def compute_chunked_fft(x: np.ndarray, nchunks: int, frange: List[float], fs: fl
     mask = (ftrue_y >= fmin) & (ftrue_y <= fmax)
     y_ft = y_ft[:, mask, :]
     ftrue_y = ftrue_y[mask]
+    fq_y = fq_y[mask]
 
-    return y_ft, ftrue_y
+    return y_ft, fq_y

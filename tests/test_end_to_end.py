@@ -9,21 +9,21 @@ from sgvb_univar.psd_estimator import PSDEstimator
 def test_end_to_end(plot_dir):
     data = ARData(
         order=4,
-        duration=4.0,
-        fs=2*np.pi
+        duration=32.0,
+        fs=100 #2*np.pi
     )
     psd_estimator = PSDEstimator(
         x=np.array(data.ts).reshape(-1, 1),
-        N_theta=30,
+        N_theta=35,
         nchunks=1,
         fs=data.fs,
     )
-    psd_all, pointwise_ci = psd_estimator.run(lr=0.03)
+    psd_all, pointwise_ci = psd_estimator.run(lr=0.02)
 
     # plot results
     fig, ax = plt.subplots()
-    plot_ci(ax, data.freqs[:-1], pointwise_ci)
-    ax.plot(data.freqs, data.psd_theoretical, color='tab:orange', label='True PSD')
+    plot_ci(ax, data.freqs[:-1], np.log(pointwise_ci))
+    ax.plot(data.freqs, np.log((data.psd_theoretical)/2), color='tab:orange', label='True PSD')
     plt.legend()
     plt.tight_layout()
     plt.savefig(f"{plot_dir}/test_end_to_end_psd.png")
@@ -34,7 +34,7 @@ def plot_ci(ax, freqs, pointwise_ci):
     ax.fill_between(
         freqs,
         pointwise_ci[0, :, 0, 0],
-        pointwise_ci[1, :, 0, 0],
+        pointwise_ci[2, :, 0, 0],
         color='lightgray',
         alpha=0.5,
         label='95% CI'

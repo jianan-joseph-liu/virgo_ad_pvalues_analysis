@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def get_freq(fs: float, n_time_samples: int, fmax=None) -> np.ndarray:
+def get_freq(fs: float, n_time_samples: int, frange=None) -> np.ndarray:
     n = n_time_samples
     dt = 1 / fs
     freq = np.fft.fftfreq(n, d=dt)
@@ -10,7 +10,9 @@ def get_freq(fs: float, n_time_samples: int, fmax=None) -> np.ndarray:
     else:  # the length per chunk is odd
         freq = freq[1: int((n - 1) / 2)]
 
-    if fmax is not None:
+    fmin, fmax = frange
+    if frange is not None:
         fmax_idx = np.searchsorted(freq, fmax)
-        freq = freq[0:fmax_idx]
+        fmin_idx = np.searchsorted(freq, fmin)
+        freq = freq[fmin_idx:fmax_idx]
     return freq

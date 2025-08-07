@@ -136,7 +136,7 @@ class PSDEstimator:
         self.x = (x - self.psd_offset) / self.psd_scaling
         self.n, self.p = x.shape
         if frange is None:
-            frange = [0, self.n // 2]
+            frange = [0, self.fs // 2]
 
         self.frange = frange
 
@@ -277,7 +277,7 @@ class PSDEstimator:
             self._freq = get_freq(
                 fs=self.fs,
                 n_time_samples=self.nt_per_chunk,
-                fmax=self.frange[-1]
+                frange=self.frange
             )
         return self._freq
 
@@ -358,6 +358,7 @@ class PSDEstimator:
             **all_kwargs,
         )
 
+    '''
     def plot_coherence(self, true_psd=None, **kwargs) -> np.ndarray[plt.Axes]:
         """
         Plot the coherence of the estimated PSD.
@@ -375,6 +376,7 @@ class PSDEstimator:
                 true_psd[0], true_psd[1], **kwargs, ax=ax, ls="--", color="k"
             )
         return ax
+    
 
     def plot_vi_losses(self) -> plt.Axes:
         """
@@ -389,6 +391,7 @@ class PSDEstimator:
             map_timing=self.inference_runner.map_time,
             kdl_timing=self.inference_runner.vi_time,
         )
+    '''
 
     def sample_posterior(self, n_samples: int = 1) -> np.ndarray:
         """

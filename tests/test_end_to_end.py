@@ -14,11 +14,11 @@ def test_end_to_end(plot_dir):
     )
     psd_estimator = PSDEstimator(
         x=np.array(data.ts).reshape(-1, 1),
-        N_theta=35,
+        N_theta=20,
         nchunks=1,
         fs=data.fs,
     )
-    psd_all, pointwise_ci = psd_estimator.run(lr=0.02)
+    psd_all, pointwise_ci = psd_estimator.run(lr=0.01)
 
     # plot results
     fig, ax = plt.subplots()
@@ -38,6 +38,12 @@ def plot_ci(ax, freqs, pointwise_ci):
         color='lightgray',
         alpha=0.5,
         label='95% CI'
+    )
+    ax.plot(
+        freqs,
+        pointwise_ci[1, :, 0, 0],
+        color="tab:blue",
+        label="Median"
     )
     ax.set_xlabel('Frequency [Hz]')
     ax.set_ylabel('PSD [1/Hz]')

@@ -9,7 +9,7 @@ from .backend import BayesianModel, ViRunner
 from .utils.periodogram import get_periodogram
 from .utils.tf_utils import set_seed
 from .utils.utils import get_freq
-from .postproc.plot_psd import plot_psd
+#from .postproc.plot_psd import plot_psd
 
 class PSDEstimator:
     """
@@ -291,6 +291,7 @@ class PSDEstimator:
         """Return the number of frequencies per chunk"""
         return len(self.freq)
 
+    '''
     def plot(
             self,
             true_psd=None,
@@ -358,7 +359,7 @@ class PSDEstimator:
             **all_kwargs,
         )
 
-    '''
+    
     def plot_coherence(self, true_psd=None, **kwargs) -> np.ndarray[plt.Axes]:
         """
         Plot the coherence of the estimated PSD.

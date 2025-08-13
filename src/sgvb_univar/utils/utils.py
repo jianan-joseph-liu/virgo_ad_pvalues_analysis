@@ -14,5 +14,5 @@ def get_freq(fs: float, n_time_samples: int, frange=None) -> np.ndarray:
     if frange is not None:
         fmax_idx = np.searchsorted(freq, fmax)
         fmin_idx = np.searchsorted(freq, fmin)
-        freq = freq[fmin_idx:fmax_idx]
+        freq = freq[fmin_idx:fmax_idx+1]
     return freq

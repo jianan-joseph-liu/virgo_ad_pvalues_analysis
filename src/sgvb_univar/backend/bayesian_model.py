@@ -116,14 +116,14 @@ class BayesianModel:
         exp_xγ_inv = tf.exp(-xγ)
 
 
-        numerator = tf.square(self.data.y_re) + tf.square(self.data.y_im)  
-        #periodograms = tf.square(self.data.y_re) + tf.square(self.data.y_im)
-        #periodo_mean = tf.reduce_mean(periodograms, axis=0, keepdims=True)
-        #numerator = periodo_mean
+        periodograms = tf.square(self.data.y_re) + tf.square(self.data.y_im)
+        n_seg = periodograms.shape[0]
+        periodo_mean = tf.reduce_mean(periodograms, axis=0, keepdims=True)
+        numerator = periodo_mean * n_seg
 
         internal = tf.multiply(numerator, exp_xγ_inv)
         tmp2_ = - tf.reduce_sum(internal, [-2, -1]) # sum over p_dim and freq
-        log_lik = tf.reduce_sum(sum_xγ + tmp2_) # sum over all LnL
+        log_lik = tf.reduce_sum(sum_xγ * n_seg + tmp2_) # sum over all LnL
         return log_lik
 
     def logpost(self, params: List[tf.Variable]) -> tf.float32:

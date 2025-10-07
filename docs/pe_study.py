@@ -6,6 +6,7 @@ import corner
 from sgvb_univar.psd_estimator import PSDEstimator
 import numpy as np
 from gwpy.timeseries import TimeSeries
+from scipy.signal.windows import tukey
 
 duration = 4.0
 sampling_frequency = 1024.0
@@ -51,8 +52,9 @@ def prepare_interferometers(det_names, sampling_frequency, duration, start_time)
     return ifos
 
 
-def welch_psd(
+def estimate_welch_psd(
         ts: TimeSeries,
+        duration = 4.0,
         sampling_frequency: float = 4096,
         psd_fractional_overlap: float = 0.5,
         post_trigger_duration: float = 2.0,
@@ -103,8 +105,7 @@ def welch_psd(
     https://git.ligo.org/lscsoft/bilby_pipe/-/blob/master/bilby_pipe/data_generation.py?ref_type=heads#L572
 
     """
-    duration = post_trigger_duration
-    psd_duration = min(psd_length * duration, psd_maximum_duration)
+    #psd_duration = min(psd_length * duration, psd_maximum_duration)
 
     # Calculate the Tukey alpha parameter
     tukey_alpha = 2 * tukey_roll_off / duration
@@ -130,26 +131,41 @@ def welch_psd(
     if maximum_frequency is not None:
         psd = psd.crop_frequencies(None, maximum_frequency)
 
-    return psd
+    return psd.frequencies.value, psd.value
 
 
-def estimate_sgvb_psd(time_series, sampling_frequency, *,
-                      N_theta=30, nchunks=1, ntrain_map=200,
-                      N_samples=100, max_hyperparm_eval=5, seed=None):
+def estimate_sgvb_psd(time_series, sampling_frequency, duration=4,
+                      minimum_frequency = 20.0, maximum_frequency = None,
+                      N_theta=6000, nchunks=32, ntrain_map=10000,
+                      N_samples=500, degree_fluctuate=8000, seed=None,
+                      tukey_roll_off = 0.4):
+    
+    N = duration * sampling_frequency        
+    tukey_alpha = 2 * tukey_roll_off / duration
+    w = tukey(N, tukey_alpha)
+    Ew = np.sqrt(np.mean(w**2))
+    
+    if maximum_frequency is None:
+        maximum_frequency = sampling_frequency//2
+        
+    frange = [minimum_frequency, maximum_frequency]    
     x = np.asarray(time_series).reshape(-1, 1)
     psd_est = PSDEstimator(
-        x,
+        x=x,
         N_theta=N_theta,
         nchunks=nchunks,
         ntrain_map=ntrain_map,
         N_samples=N_samples,
         fs=sampling_frequency,
-        max_hyperparm_eval=max_hyperparm_eval,
-        seed=seed,
+        max_hyperparm_eval=1,
+        degree_fluctuate=degree_fluctuate,
+        n_elbo_maximisation_steps=600,
+        frange=frange
     )
-    psd_est.run(lr=1e-2)
+    psd_est.run(lr=0.008)
     freqs = psd_est.freq
     psd = psd_est.pointwise_ci[1]
+    psd = *2 / Ew**2
     return freqs, psd
 
 
@@ -202,11 +218,10 @@ def run_pe_study(
     for ifo in ifos:
         on_source_data = ifo.strain_data.time_slice(start_time, signal_end_time)
         psd_data = ifo.strain_data.time_slice(signal_end_time, psd_end_time)
-        psd_data = np.array(psd_data)
 
         # Compute Welch PSD + SGVB PSD
-        freqs_welch, welch_psd = welch_psd(psd_data, sampling_frequency_local)
-        freqs_sgvb, sgvb_psd = estimate_sgvb_psd(psd_data, sampling_frequency_local, **sgvb_settings)
+        freqs_welch, welch_psd = estimate_welch_psd(psd_data, sampling_frequency_local)
+        freqs_sgvb, sgvb_psd = estimate_sgvb_psd(psd_data, sampling_frequency_local)
 
         # TODO: plot the two PSDs for comparison along with on-source data
 

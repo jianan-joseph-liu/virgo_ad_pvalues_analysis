@@ -4,7 +4,7 @@ from typing import Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 from hyperopt import fmin, hp, tpe
-
+from .postproc.plot_losses import plot_losses
 from .backend import BayesianModel, ViRunner
 from .utils.periodogram import get_periodogram
 from .utils.tf_utils import set_seed
@@ -377,7 +377,7 @@ class PSDEstimator:
                 true_psd[0], true_psd[1], **kwargs, ax=ax, ls="--", color="k"
             )
         return ax
-    
+    '''
 
     def plot_vi_losses(self) -> plt.Axes:
         """
@@ -392,7 +392,7 @@ class PSDEstimator:
             map_timing=self.inference_runner.map_time,
             kdl_timing=self.inference_runner.vi_time,
         )
-    '''
+    
 
     def sample_posterior(self, n_samples: int = 1) -> np.ndarray:
         """

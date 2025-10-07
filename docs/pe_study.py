@@ -54,8 +54,8 @@ def prepare_interferometers(det_names, sampling_frequency, duration, start_time)
 
 def estimate_welch_psd(
         ts: TimeSeries,
-        duration = 4.0,
         sampling_frequency: float = 4096,
+        duration = 4.0,
         psd_fractional_overlap: float = 0.5,
         post_trigger_duration: float = 2.0,
         psd_length: int = 32,

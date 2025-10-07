@@ -3,6 +3,8 @@ _version.py
 *.RData
 *.h5
 
+*outdir
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

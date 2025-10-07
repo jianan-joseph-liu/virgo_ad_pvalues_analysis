@@ -46,7 +46,9 @@ dependencies = [
     "hyperopt",
     "colorama",
     'click',
-    "statsmodels"
+    "statsmodels",
+    "bilby",
+    "corner",
 ]
 
 [project.optional-dependencies]

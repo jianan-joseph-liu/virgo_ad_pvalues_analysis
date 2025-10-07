@@ -1,3 +1,6 @@
+"""
+Runs a parameter estimation study comparing SGVB and Welch PSD estimates.
+"""
 import bilby
 import corner
 from sgvb_univar.psd_estimator import PSDEstimator

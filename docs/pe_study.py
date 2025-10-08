@@ -230,15 +230,18 @@ def run_pe_study(
     signal_end_time = start_time + duration
     psd_start_time = start_time + duration
     psd_end_time = psd_start_time + duration * 32
-    ifos = prepare_interferometers(det_names, sampling_frequency_local, duration=psd_end_time, start_time=start_time)
+    ifos = prepare_interferometers(det_names, sampling_frequency_local, duration=duration, start_time=start_time)
     ifos.inject_signal(waveform_generator=waveform_generator, parameters=injection_params)
+    
+    noise_ifos = prepare_interferometers(det_names, sampling_frequency_local,
+                                         duration=duration * 32, start_time=psd_start_time)
 
     psd_estimates = {}
 
     # Extract noise-only segment (all data after injection )
     for ifo in ifos:
         on_source_data = ifo.strain_data.time_slice(start_time, signal_end_time)
-        psd_data = ifo.strain_data.time_slice(signal_end_time, psd_end_time)
+        psd_data = noise_ifos[0].strain_data.time_slice(signal_end_time, psd_end_time)
 
         # Compute Welch PSD + SGVB PSD
         freqs_welch, welch_psd = estimate_welch_psd(psd_data, sampling_frequency_local)

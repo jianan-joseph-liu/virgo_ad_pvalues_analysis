@@ -242,7 +242,7 @@ def run_pe_study(
     for ifo in ifos:
         on_source_data = ifo.strain_data#.time_slice(start_time, signal_end_time)
         psd_data = TimeSeries(np.asarray(noise_ifos[0].strain_data), 
-                              dt = 1/sampling_frequency)#.time_slice(signal_end_time, psd_end_time)
+                              dt = 1.0/sampling_frequency)#.time_slice(signal_end_time, psd_end_time)
 
         # Compute Welch PSD + SGVB PSD
         freqs_welch, welch_psd = estimate_welch_psd(psd_data, sampling_frequency_local)

@@ -7,6 +7,7 @@ from sgvb_univar.psd_estimator import PSDEstimator
 import numpy as np
 from gwpy.timeseries import TimeSeries
 from scipy.signal.windows import tukey
+import matplotlib.pyplot as plt
 
 duration = 4.0
 sampling_frequency = 1024.0
@@ -50,6 +51,26 @@ def prepare_interferometers(det_names, sampling_frequency, duration, start_time)
         start_time=start_time,
     )
     return ifos
+
+
+def get_fd_data(strain_data: np.ndarray, times: np.ndarray, det: str, roll_off: float, fmin: float, fmax: float):
+    """Fixed function with correct variable names and parameters."""
+    if fmax is None:
+        fmax = sampling_frequency//2
+    
+    strain_ts = TimeSeries(strain_data, times=times)
+    ifo = bilby.gw.detector.get_empty_interferometer(det)
+    ifo.strain_data.roll_off = roll_off
+    ifo.maximum_frequency = fmax  # Fixed: was f_f
+    ifo.minimum_frequency = fmin  # Fixed: was f_i
+    ifo.strain_data.set_from_gwpy_timeseries(strain_ts)
+
+    x = ifo.strain_data.frequency_array
+    y = ifo.strain_data.frequency_domain_strain
+    Ew = np.sqrt(ifo.strain_data.window_factor)
+
+    I = (x >= fmin) & (x <= fmax)  # Fixed: was f_i and f_f
+    return x[I], y[I] / Ew
 
 
 def estimate_welch_psd(
@@ -165,7 +186,7 @@ def estimate_sgvb_psd(time_series, sampling_frequency, duration=4,
     psd_est.run(lr=0.008)
     freqs = psd_est.freq
     psd = psd_est.pointwise_ci[1]
-    psd = *2 / Ew**2
+    psd = psd*2 / Ew**2
     return freqs, psd
 
 
@@ -227,6 +248,29 @@ def run_pe_study(
 
         psd_estimates['welch'] = (freqs_welch, welch_psd)
         psd_estimates['sgvb'] = (freqs_sgvb, sgvb_psd)
+        
+        
+    # plot the two PSDs for comparison along with on-source data
+    freqs_welch, welch_psd = psd_estimates['welch']
+    freqs_sgvb,  sgvb_psd  = psd_estimates['sgvb']
+    
+    N = len(on_source_data)                   
+    times = np.arange(N) / sampling_frequency_local         
+    f, on_source_f = get_fd_data(on_source_data, times = times, det='H1',
+                              roll_off = 0.4, fmin = minimum_frequency, fmax = None)
+    
+    fig = plt.figure(figsize=(7, 5))
+    plt.loglog(f, np.abs(on_source_f)**2, alpha=0.3, label="Data", color = "lightgray")
+    plt.loglog(freqs_welch, welch_psd, alpha=0.7, label="Welch PSD", color = "green")
+    plt.loglog(freqs_sgvb, sgvb_psd, alpha=1, label="SGVB PSD", color = "red")
+    plt.xlabel("Frequency [Hz]")
+    plt.ylabel("PSD [strain²/Hz]")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+    outpath = f"{outdir}/SGVB_Welch_PSDs.png"
+    fig.savefig(outpath, dpi=200)
+    
 
     # edit IFO to only have the first 4 secnds of data (with signal) -- crop the rest out
     for ifo in ifos:

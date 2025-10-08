@@ -240,8 +240,8 @@ def run_pe_study(
 
     # Extract noise-only segment (all data after injection )
     for ifo in ifos:
-        on_source_data = ifo.strain_data#.time_slice(start_time, signal_end_time)
-        psd_data = TimeSeries(np.asarray(noise_ifos[0].strain_data), 
+        on_source_data = np.asarray(ifo.strain_data.time_domain_strain)#.time_slice(start_time, signal_end_time)
+        psd_data = TimeSeries(np.asarray(noise_ifos[0].strain_data.time_domain_strain), 
                               dt = 1.0/sampling_frequency)#.time_slice(signal_end_time, psd_end_time)
 
         # Compute Welch PSD + SGVB PSD

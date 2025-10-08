@@ -159,11 +159,11 @@ def estimate_welch_psd(
 
 def estimate_sgvb_psd(time_series, sampling_frequency, duration=4,
                       minimum_frequency = 20.0, maximum_frequency = None,
-                      N_theta=6000, nchunks=32, ntrain_map=10000,
+                      N_theta=800, nchunks=32, ntrain_map=10000,
                       N_samples=500, degree_fluctuate=8000, seed=None,
                       tukey_roll_off = 0.4):
     
-    N = duration * sampling_frequency        
+    N = int(duration * sampling_frequency)        
     tukey_alpha = 2 * tukey_roll_off / duration
     w = tukey(N, tukey_alpha)
     Ew = np.sqrt(np.mean(w**2))
@@ -185,7 +185,7 @@ def estimate_sgvb_psd(time_series, sampling_frequency, duration=4,
         n_elbo_maximisation_steps=600,
         frange=frange
     )
-    psd_est.run(lr=0.008)
+    psd_est.run(lr=0.02)
     freqs = psd_est.freq
     psd = psd_est.pointwise_ci[1]
     psd = psd*2 / Ew**2
@@ -268,7 +268,7 @@ def run_pe_study(
     fig = plt.figure(figsize=(7, 5))
     plt.loglog(f, np.abs(on_source_f)**2, alpha=0.3, label="Data", color = "lightgray")
     plt.loglog(freqs_welch, welch_psd, alpha=0.7, label="Welch PSD", color = "green")
-    plt.loglog(freqs_sgvb, sgvb_psd, alpha=1, label="SGVB PSD", color = "red")
+    plt.loglog(freqs_sgvb, sgvb_psd[:,0,0], alpha=1, label="SGVB PSD", color = "red")
     plt.xlabel("Frequency [Hz]")
     plt.ylabel("PSD [strain²/Hz]")
     plt.legend()
@@ -277,10 +277,11 @@ def run_pe_study(
     outpath = f"{outdir}/SGVB_Welch_PSDs.png"
     fig.savefig(outpath, dpi=200)
     
-
+    '''
     # edit IFO to only have the first 4 secnds of data (with signal) -- crop the rest out
     for ifo in ifos:
         ifo.strain_data = ifo.strain_data.time_slice(start_time, signal_end_time)
+    '''    
 
     # Now we do the analysis twice, once with each PSD
     results = {}

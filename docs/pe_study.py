@@ -127,6 +127,8 @@ def estimate_welch_psd(
 
     """
     #psd_duration = min(psd_length * duration, psd_maximum_duration)
+    if maximum_frequency is None:
+        maximum_frequency = sampling_frequency//2
 
     # Calculate the Tukey alpha parameter
     tukey_alpha = 2 * tukey_roll_off / duration
@@ -147,12 +149,12 @@ def estimate_welch_psd(
     )
 
     # Restrict frequency band
-    if minimum_frequency is not None:
-        psd = psd.crop_frequencies(minimum_frequency, None)
-    if maximum_frequency is not None:
-        psd = psd.crop_frequencies(None, maximum_frequency)
+    freqs_welch = psd.frequencies.value
+    mask = (freqs_welch >= minimum_frequency) & (freqs_welch <= maximum_frequency)
+    freqs_welch = freqs_welch[mask]
+    psd = psd[mask]
 
-    return psd.frequencies.value, psd.value
+    return freqs_welch, psd
 
 
 def estimate_sgvb_psd(time_series, sampling_frequency, duration=4,

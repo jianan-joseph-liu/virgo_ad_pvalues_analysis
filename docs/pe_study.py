@@ -8,6 +8,8 @@ import numpy as np
 from gwpy.timeseries import TimeSeries
 from scipy.signal.windows import tukey
 import matplotlib.pyplot as plt
+import copy
+from bilby.gw.detector.psd import PowerSpectralDensity
 
 duration = 4.0
 sampling_frequency = 1024.0
@@ -189,13 +191,14 @@ def estimate_sgvb_psd(time_series, sampling_frequency, duration=4,
     freqs = psd_est.freq
     psd = psd_est.pointwise_ci[1]
     psd = psd*2 / Ew**2
-    return freqs, psd
+    return freqs, np.real(psd[:,0,0])
 
 
 def run_pe_study(
         det_names=("H1",),
         sampling_frequency_local=sampling_frequency,
         minimum_frequency_local=minimum_frequency,
+        maximum_frequency_local=sampling_frequency//2,
         outdir="outdir_pe_study",
         sgvb_settings=None,
         seed=0,
@@ -258,7 +261,20 @@ def run_pe_study(
         
     # plot the two PSDs for comparison along with on-source data
     freqs_welch, welch_psd = psd_estimates['welch']
+    print("Welch PSD freq:", "length = ", len(freqs_welch), " min =", freqs_welch[0], " max =", freqs_welch[-1],
+      " df =", freqs_welch[1]-freqs_welch[0])
     freqs_sgvb,  sgvb_psd  = psd_estimates['sgvb']
+    print("SGVB PSD freq:", "length = ", len(freqs_sgvb), " min =", freqs_sgvb[0], " max =", freqs_sgvb[-1],
+      " df =", freqs_sgvb[1]-freqs_sgvb[0])
+    
+    freqs_true = ifos[0].power_spectral_density.frequency_array
+    true_psd = ifos[0].power_spectral_density.psd_array
+    mask = (freqs_true >= minimum_frequency_local) & (freqs_true <= maximum_frequency_local)
+    freqs_true = freqs_true[mask]
+    true_psd = true_psd[mask]
+    print("True PSD freq:", "length = ", len(freqs_true), " min =", freqs_true[0], " max =", freqs_true[-1],
+      " df =", freqs_true[1]-freqs_true[0])
+    
     
     N = len(on_source_data)                   
     times = np.arange(N) / sampling_frequency_local         
@@ -268,7 +284,8 @@ def run_pe_study(
     fig = plt.figure(figsize=(7, 5))
     plt.loglog(f, np.abs(on_source_f)**2, alpha=0.3, label="Data", color = "lightgray")
     plt.loglog(freqs_welch, welch_psd, alpha=0.7, label="Welch PSD", color = "green")
-    plt.loglog(freqs_sgvb, sgvb_psd[:,0,0], alpha=1, label="SGVB PSD", color = "red")
+    plt.loglog(freqs_sgvb, sgvb_psd, alpha=1, label="SGVB PSD", color = "red")
+    plt.loglog(freqs_true, true_psd, alpha=1, label="Original PSD", color = "blue")
     plt.xlabel("Frequency [Hz]")
     plt.ylabel("PSD [strain²/Hz]")
     plt.legend()
@@ -277,31 +294,48 @@ def run_pe_study(
     outpath = f"{outdir}/SGVB_Welch_PSDs.png"
     fig.savefig(outpath, dpi=200)
     
-    '''
-    # edit IFO to only have the first 4 secnds of data (with signal) -- crop the rest out
-    for ifo in ifos:
-        ifo.strain_data = ifo.strain_data.time_slice(start_time, signal_end_time)
-    '''    
+     
+    # collect Original, Welch and SGVB PSDs
+    ifos_orig = copy.deepcopy(ifos)
+    ifos_welch = copy.deepcopy(ifos)
+    ifos_sgvb = copy.deepcopy(ifos)
+    
+    welch_psd_object = PowerSpectralDensity.from_amplitude_spectral_density_array(
+        freqs_welch, np.sqrt(welch_psd)
+    )
+    sgvb_psd_object = PowerSpectralDensity.from_amplitude_spectral_density_array(
+        freqs_sgvb, np.sqrt(sgvb_psd)
+    )
+    
+    for i in range(len(ifos_orig)):
+        ifos_welch[i].power_spectral_density = welch_psd_object
+        ifos_sgvb[i].power_spectral_density = sgvb_psd_object
+    
+    ifos_for_analysis = dict(
+        welch=ifos_welch,
+        sgvb=ifos_sgvb,
+        original=ifos_orig,
+    )
+
 
     # Now we do the analysis twice, once with each PSD
     results = {}
-    for psd_name, (freqs, psd_array) in psd_estimates.items():
-        for ifo in ifos:
-            # TODO: check that the PSD freq bins match the ifo freq bins
-            ifo.power_spectral_density_array = np.asarray(psd_array)
-        likelihood = bilby.gw.GravitationalWaveTransient(interferometers=ifos, waveform_generator=waveform_generator)
-        run_label = f"{label}_{psd_name}"
+    for name, analysis_ifos in ifos_for_analysis.items():
+        likelihood = bilby.gw.GravitationalWaveTransient(interferometers=analysis_ifos, waveform_generator=waveform_generator)
+        print("Running analysis with", name, "PSD")
+        print(likelihood.interferometers[0].power_spectral_density)
+        run_label = f"{label}_{name}"
         res = bilby.run_sampler(
             likelihood=likelihood,
             priors=analysis_prior,
             sampler="dynesty",
-            npoints=50,
+            npoints=10,
             injection_parameters=injection_params,
             outdir=outdir,
             label=run_label,
             resume=False,
         )
-        results[psd_name] = res
+        results[name] = res
 
     # compute Bayes factor SGVB vs Welch
     logZ_welch = results["welch"].log_evidence

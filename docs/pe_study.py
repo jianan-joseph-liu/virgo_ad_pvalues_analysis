@@ -280,12 +280,14 @@ def run_pe_study(
     times = np.arange(N) / sampling_frequency_local         
     f, on_source_f = get_fd_data(on_source_data, times = times, det='H1',
                               roll_off = 0.4, fmin = minimum_frequency, fmax = None)
+    print("on_source_f:", "length = ", len(f), " min =", f[0], " max =", f[-1],
+      " df =", f[1]-f[0])
     
     fig = plt.figure(figsize=(7, 5))
     plt.loglog(f, np.abs(on_source_f)**2, alpha=0.3, label="Data", color = "lightgray")
     plt.loglog(freqs_welch, welch_psd, alpha=0.7, label="Welch PSD", color = "green")
     plt.loglog(freqs_sgvb, sgvb_psd, alpha=1, label="SGVB PSD", color = "red")
-    plt.loglog(freqs_true, true_psd, alpha=1, label="Original PSD", color = "blue")
+    plt.loglog(freqs_true, true_psd, alpha=0.5, label="Original PSD", color = "blue")
     plt.xlabel("Frequency [Hz]")
     plt.ylabel("PSD [strain²/Hz]")
     plt.legend()
@@ -329,7 +331,7 @@ def run_pe_study(
             likelihood=likelihood,
             priors=analysis_prior,
             sampler="dynesty",
-            npoints=10,
+            npoints=50,
             injection_parameters=injection_params,
             outdir=outdir,
             label=run_label,
@@ -340,11 +342,13 @@ def run_pe_study(
     # compute Bayes factor SGVB vs Welch
     logZ_welch = results["welch"].log_evidence
     logZ_sgvb = results["sgvb"].log_evidence
+    logZ_original = results["original"].log_evidence
     logBF = logZ_sgvb - logZ_welch
     BF = np.exp(logBF)
 
     print(f"logZ (welch) = {logZ_welch:.3f}")
     print(f"logZ (sgvb)  = {logZ_sgvb:.3f}")
+    print(f"logZ (original)  = {logZ_original:.3f}")
     print(f"logBF (sgvb - welch) = {logBF:.3f}, BF = {BF:.3e}")
 
     # Produce an overlaid corner plot of the sampled posteriors
@@ -365,7 +369,12 @@ def run_pe_study(
     print(f"Saved overlaid corner to {outpath}")
 
     # Make a corner plot for the last result as in the original example.
-    results['sgvb'].plot_corner()
+    outpath2 = f"{outdir}/{label}_sgvb_corner.png"
+    results['sgvb'].plot_corner(parameters=param_names,
+                                priors=False,
+                                save=True,
+                                filename=outpath2,
+                                dpi=200)
 
     meta = dict(
         welch_freq=freqs_welch,

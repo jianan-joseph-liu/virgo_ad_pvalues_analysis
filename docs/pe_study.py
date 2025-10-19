@@ -354,7 +354,7 @@ def run_pe_study(
     # Produce an overlaid corner plot of the sampled posteriors
     post_w = results["welch"].posterior
     post_s = results["sgvb"].posterior
-    param_names = [c for c in post_w.columns if c not in ["log_likelihood", "weight"]]
+    param_names = list(results["welch"].search_parameter_keys)
 
     samples_w = post_w[param_names].to_numpy()
     samples_s = post_s[param_names].to_numpy()

@@ -332,7 +332,7 @@ def run_pe_study(
             likelihood=likelihood,
             priors=analysis_prior,
             sampler="dynesty",
-            npoints=1000,
+            npoints=2000,
             injection_parameters=injection_params,
             outdir=outdir,
             label=run_label,
@@ -365,9 +365,10 @@ def run_pe_study(
     corner.corner(samples_s, labels=param_names, fig=fig, color='C1', plot_datapoints=False,
                   plot_contours=True, fill_contours=False)
     fig.set_size_inches(10, 10) 
-    fig.legend([Line2D([0],[0], color="C0", lw=2, label="Welch"),
-            Line2D([0],[0], color="C1", lw=2, label="SGVB")],
-           loc="upper right")
+    handles = [Line2D([0],[0], color="C0", lw=2),
+               Line2D([0],[0], color="C1", lw=2)]
+    labels  = ["Welch", "SGVB"]
+    fig.legend(handles, labels, loc="upper right")
     fig.suptitle(f"Overlaid posteriors: SGVB (C1) vs Welch (C0)\nlogBF={logBF:.2f}")
     fig.tight_layout()
     outpath = f"{outdir}/{label}_overlaid_corner.png"

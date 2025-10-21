@@ -10,6 +10,7 @@ from scipy.signal.windows import tukey
 import matplotlib.pyplot as plt
 import copy
 from bilby.gw.detector.psd import PowerSpectralDensity
+from matplotlib.lines import Line2D
 
 duration = 4.0
 sampling_frequency = 1024.0
@@ -331,7 +332,7 @@ def run_pe_study(
             likelihood=likelihood,
             priors=analysis_prior,
             sampler="dynesty",
-            npoints=50,
+            npoints=1000,
             injection_parameters=injection_params,
             outdir=outdir,
             label=run_label,
@@ -363,7 +364,12 @@ def run_pe_study(
                         title_fmt='.2f', plot_datapoints=False)
     corner.corner(samples_s, labels=param_names, fig=fig, color='C1', plot_datapoints=False,
                   plot_contours=True, fill_contours=False)
+    fig.set_size_inches(10, 10) 
+    fig.legend([Line2D([0],[0], color="C0", lw=2, label="Welch"),
+            Line2D([0],[0], color="C1", lw=2, label="SGVB")],
+           loc="upper right")
     fig.suptitle(f"Overlaid posteriors: SGVB (C1) vs Welch (C0)\nlogBF={logBF:.2f}")
+    fig.tight_layout()
     outpath = f"{outdir}/{label}_overlaid_corner.png"
     fig.savefig(outpath, dpi=200)
     print(f"Saved overlaid corner to {outpath}")

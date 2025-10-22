@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import copy
 from bilby.gw.detector.psd import PowerSpectralDensity
 from matplotlib.lines import Line2D
+import os
+import multiprocessing as mp
 
 duration = 4.0
 sampling_frequency = 1024.0
@@ -328,11 +330,17 @@ def run_pe_study(
         print("Running analysis with", name, "PSD")
         print(likelihood.interferometers[0].power_spectral_density)
         run_label = f"{label}_{name}"
+        npool = min(mp.cpu_count(), int(os.environ.get("SLURM_CPUS_PER_TASK", "1")))
         res = bilby.run_sampler(
             likelihood=likelihood,
             priors=analysis_prior,
             sampler="dynesty",
             npoints=2000,
+            dlogz=0.01,
+            bound="live-multi",
+            checkpoint_interval=100000,
+            npool=npool,
+            queue_size=npool,
             injection_parameters=injection_params,
             outdir=outdir,
             label=run_label,

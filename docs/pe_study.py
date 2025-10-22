@@ -344,6 +344,7 @@ def run_pe_study(
             sample="act-walk",
             nact=4,
             maxmcmc=25000,
+            n_effective=5000,
             injection_parameters=injection_params,
             outdir=outdir,
             label=run_label,

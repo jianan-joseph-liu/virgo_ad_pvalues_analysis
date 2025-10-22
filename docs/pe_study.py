@@ -162,8 +162,8 @@ def estimate_welch_psd(
 
 def estimate_sgvb_psd(time_series, sampling_frequency, duration=4,
                       minimum_frequency = 20.0, maximum_frequency = None,
-                      N_theta=800, nchunks=32, ntrain_map=10000,
-                      N_samples=500, degree_fluctuate=8000, seed=None,
+                      N_theta=2000, nchunks=32, ntrain_map=10000,
+                      N_samples=500, degree_fluctuate=2000, seed=None,
                       tukey_roll_off = 0.4):
     
     N = int(duration * sampling_frequency)        
@@ -333,6 +333,8 @@ def run_pe_study(
             priors=analysis_prior,
             sampler="dynesty",
             npoints=2000,
+            maxmcmc=5000,
+            dlogz=0.1,
             injection_parameters=injection_params,
             outdir=outdir,
             label=run_label,

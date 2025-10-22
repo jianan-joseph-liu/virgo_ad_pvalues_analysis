@@ -331,6 +331,7 @@ def run_pe_study(
         print(likelihood.interferometers[0].power_spectral_density)
         run_label = f"{label}_{name}"
         npool = min(mp.cpu_count(), int(os.environ.get("SLURM_CPUS_PER_TASK", "1")))
+        print("npool = ", npool)
         res = bilby.run_sampler(
             likelihood=likelihood,
             priors=analysis_prior,
@@ -341,8 +342,8 @@ def run_pe_study(
             checkpoint_interval=100000,
             npool=npool,
             queue_size=npool,
-            sample="act-walk",
-            nact=4,
+            sample="acceptance-walk",
+            naccept=50,
             maxmcmc=25000,
             n_effective=5000,
             injection_parameters=injection_params,
@@ -363,6 +364,9 @@ def run_pe_study(
     print(f"logZ (sgvb)  = {logZ_sgvb:.3f}")
     print(f"logZ (original)  = {logZ_original:.3f}")
     print(f"logBF (sgvb - welch) = {logBF:.3f}, BF = {BF:.3e}")
+
+    print("Welch posterior rows:", len(results["welch"].posterior))
+    print("SGVB  posterior rows:", len(results["sgvb"].posterior))
 
     # Produce an overlaid corner plot of the sampled posteriors
     post_w = results["welch"].posterior

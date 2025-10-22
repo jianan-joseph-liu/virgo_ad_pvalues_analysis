@@ -333,8 +333,6 @@ def run_pe_study(
             priors=analysis_prior,
             sampler="dynesty",
             npoints=2000,
-            maxmcmc=5000,
-            dlogz=0.1,
             injection_parameters=injection_params,
             outdir=outdir,
             label=run_label,

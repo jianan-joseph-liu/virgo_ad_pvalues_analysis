@@ -337,6 +337,7 @@ def run_pe_study(
             priors=analysis_prior,
             sampler="dynesty",
             npoints=2000,
+            dlogz=0.01,
             checkpoint_interval=100000,
             npool=npool,
             queue_size=npool,

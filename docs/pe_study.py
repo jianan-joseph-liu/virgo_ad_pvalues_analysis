@@ -44,8 +44,7 @@ fixed_analysis_params = [
     "phase",
     # to make even faster
     'theta_jn',
-    'luminosity_distance',
-    "mass_ratio",
+    'luminosity_distance'
 ]
 
 

@@ -212,7 +212,7 @@ def run_pe_study(
 ):
     bilby.core.utils.random.seed(seed)
     label = f"seed_{seed}"
-    outdir = f"outdir/seed_{seed}"
+    outdir = f"outdir_pe_study/seed_{seed}"
 
     print(">>>> Running PE study with seed =", seed, " <<<<")
     ## SETUP INJECTION + PRIORS FOR ANALYSIS
@@ -341,8 +341,8 @@ def run_pe_study(
             likelihood=likelihood,
             priors=analysis_prior,
             sampler="dynesty",
-            npoints=1000,
-            dlogz=0.1,
+            npoints=2000,
+            dlogz=0.01,
             checkpoint_interval=100000,
             npool=npool,
             queue_size=npool,

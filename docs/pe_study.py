@@ -13,9 +13,10 @@ from bilby.gw.detector.psd import PowerSpectralDensity
 from matplotlib.lines import Line2D
 import os
 import multiprocessing as mp
+import sys
 
 duration = 4.0
-sampling_frequency = 1024.0
+sampling_frequency = 2048.0
 minimum_frequency = 20
 waveform_generator = bilby.gw.WaveformGenerator(
     duration=duration,
@@ -41,6 +42,10 @@ fixed_analysis_params = [
     "dec",
     "geocent_time",
     "phase",
+    # to make even faster
+    'theta_jn',
+    'luminosity_distance',
+    "mass_ratio",
 ]
 
 
@@ -208,6 +213,7 @@ def run_pe_study(
 ):
     bilby.core.utils.random.seed(seed)
     label = f"seed_{seed}"
+    outdir = f"outdir/seed_{seed}"
 
     print(">>>> Running PE study with seed =", seed, " <<<<")
     ## SETUP INJECTION + PRIORS FOR ANALYSIS
@@ -336,8 +342,8 @@ def run_pe_study(
             likelihood=likelihood,
             priors=analysis_prior,
             sampler="dynesty",
-            npoints=2000,
-            dlogz=0.01,
+            npoints=1000,
+            dlogz=0.1,
             checkpoint_interval=100000,
             npool=npool,
             queue_size=npool,
@@ -394,15 +400,29 @@ def run_pe_study(
                                 filename=outpath2,
                                 dpi=200)
 
+    # --- Save evidences (compact numeric file) ---
+    # write: logZ_welch, logZ_sgvb, logZ_original, logBF, BF as one row
+    os.makedirs(outdir, exist_ok=True)
+    ev = np.array([logZ_welch, logZ_sgvb, logZ_original, logBF, BF], dtype=float)
+    header = "logZ_welch logZ_sgvb logZ_original logBF_sgvb_vs_welch BF_sgvb_vs_welch"
+    np.savetxt(os.path.join(outdir, f"{label}_evidences.txt"), ev.reshape(1, -1), header=header, fmt="%.6e")
+
     meta = dict(
         welch_freq=freqs_welch,
         welch_psd=welch_psd,
         sgvb_freq=freqs_sgvb,
         sgvb_median=sgvb_psd,
     )
+    
+    
     return results, meta
 
 
 if __name__ == '__main__':
     # Run with the default parameters defined at module scope
-    run_pe_study(seed=0)
+    args = sys.argv[1:]
+    seed = 0
+    if len(args) > 0:
+        seed = int(args[0])
+    run_pe_study(seed=seed)
+

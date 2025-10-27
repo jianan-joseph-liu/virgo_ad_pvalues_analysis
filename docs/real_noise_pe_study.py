@@ -30,6 +30,7 @@ waveform_generator = bilby.gw.WaveformGenerator(
         waveform_approximant="IMRPhenomPv2",
         reference_frequency=50.0,
         minimum_frequency=minimum_frequency,
+        maximum_frequency=maximum_frequency
     ),
 )
 
@@ -373,7 +374,6 @@ def run_pe_study(
     
      
     # collect Original, Welch and SGVB PSDs
-    ifos_orig = copy.deepcopy(ifos)
     ifos_welch = copy.deepcopy(ifos)
     ifos_sgvb = copy.deepcopy(ifos)
     
@@ -384,21 +384,23 @@ def run_pe_study(
         freqs_sgvb, np.sqrt(sgvb_psd)
     )
     
-    for i in range(len(ifos_orig)):
+    for i in range(len(ifos)):
         ifos_welch[i].power_spectral_density = welch_psd_object
         ifos_sgvb[i].power_spectral_density = sgvb_psd_object
     
     ifos_for_analysis = dict(
         welch=ifos_welch,
-        sgvb=ifos_sgvb,
-        original=ifos_orig,
+        sgvb=ifos_sgvb
     )
 
 
     # Now we do the analysis twice, once with each PSD
     results = {}
     for name, analysis_ifos in ifos_for_analysis.items():
-        likelihood = bilby.gw.GravitationalWaveTransient(interferometers=analysis_ifos, waveform_generator=waveform_generator)
+        likelihood = bilby.gw.GravitationalWaveTransient(interferometers=analysis_ifos,
+                                                         waveform_generator=waveform_generator,
+                                                         minimum_frequency_local=minimum_frequency,
+                                                         maximum_frequency_local=maximum_frequency,)
         print("Running analysis with", name, "PSD")
         print(likelihood.interferometers[0].power_spectral_density)
         run_label = f"{label}_{name}"
@@ -423,13 +425,11 @@ def run_pe_study(
     # compute Bayes factor SGVB vs Welch
     logZ_welch = results["welch"].log_evidence
     logZ_sgvb = results["sgvb"].log_evidence
-    logZ_original = results["original"].log_evidence
     logBF = logZ_sgvb - logZ_welch
     BF = np.exp(logBF)
 
     print(f"logZ (welch) = {logZ_welch:.3f}")
     print(f"logZ (sgvb)  = {logZ_sgvb:.3f}")
-    print(f"logZ (original)  = {logZ_original:.3f}")
     print(f"logBF (sgvb - welch) = {logBF:.3f}, BF = {BF:.3e}")
 
     print("Welch posterior rows:", len(results["welch"].posterior))
@@ -469,8 +469,8 @@ def run_pe_study(
     # --- Save evidences (compact numeric file) ---
     # write: logZ_welch, logZ_sgvb, logZ_original, logBF, BF as one row
     os.makedirs(outdir, exist_ok=True)
-    ev = np.array([logZ_welch, logZ_sgvb, logZ_original, logBF, BF], dtype=float)
-    header = "logZ_welch logZ_sgvb logZ_original logBF_sgvb_vs_welch BF_sgvb_vs_welch"
+    ev = np.array([logZ_welch, logZ_sgvb, logBF, BF], dtype=float)
+    header = "logZ_welch logZ_sgvb logBF_sgvb_vs_welch BF_sgvb_vs_welch"
     np.savetxt(os.path.join(outdir, f"{label}_evidences.txt"), ev.reshape(1, -1), header=header, fmt="%.6e")
 
     meta = dict(

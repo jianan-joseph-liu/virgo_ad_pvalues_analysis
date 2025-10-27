@@ -118,8 +118,9 @@ def prepare_interferometers(det_names, sampling_frequency, duration, seed):
     segment, t0, t1 = get_noise_segment_from_seed(segment_file, data_dir, seed)
     start_time = t1 - duration
     print('Start GPS time:', start_time, 'End GPS time:', t1)
-    on_source_data = segment[32*sampling_frequency*duration: ]
-    off_source_data = segment[:32*sampling_frequency*duration]
+    boundary = int(32*sampling_frequency*duration)
+    on_source_data = segment[boundary: ]
+    off_source_data = segment[:boundary]
     
     for ifo in ifos:
         ifo.set_strain_data_from_time_domain_strain(

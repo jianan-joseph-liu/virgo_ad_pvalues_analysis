@@ -256,6 +256,7 @@ def estimate_sgvb_psd(time_series, sampling_frequency, duration=4,
     '''
     tukey_alpha = 2 * tukey_roll_off / duration
     import_data = window_in_chunks(time_series.value, nchunks, tukey_alpha)
+    import_data = import_data.reshape(-1, 1)
     
     N = int(duration * sampling_frequency)        
     w = tukey(N, tukey_alpha)

@@ -399,8 +399,8 @@ def run_pe_study(
     for name, analysis_ifos in ifos_for_analysis.items():
         likelihood = bilby.gw.GravitationalWaveTransient(interferometers=analysis_ifos,
                                                          waveform_generator=waveform_generator,
-                                                         minimum_frequency_local=minimum_frequency,
-                                                         maximum_frequency_local=maximum_frequency,)
+                                                         minimum_frequency=minimum_frequency_local,
+                                                         maximum_frequency=maximum_frequency_local,)
         print("Running analysis with", name, "PSD")
         print(likelihood.interferometers[0].power_spectral_density)
         run_label = f"{label}_{name}"

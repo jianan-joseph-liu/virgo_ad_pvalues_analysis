@@ -123,7 +123,7 @@ def prepare_interferometers(det_names, sampling_frequency, duration, seed):
     off_source_data = segment[:boundary]
     
     for ifo in ifos:
-        ifo.set_strain_data_from_time_domain_strain(
+        ifo.strain_data.set_from_time_domain_strain(
             time_domain_strain=on_source_data,
             sampling_frequency=sampling_frequency,
             start_time=start_time,

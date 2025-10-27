@@ -127,6 +127,7 @@ def prepare_interferometers(det_names, sampling_frequency, duration, seed):
             time_domain_strain=on_source_data,
             sampling_frequency=sampling_frequency,
             start_time=start_time,
+            duration=duration
         )
     return ifos, on_source_data, off_source_data
 

@@ -117,6 +117,9 @@ def prepare_interferometers(det_names, sampling_frequency, duration, seed):
             start_time=start_time,
             duration=duration
         )
+        
+        ifo.maximum_frequency = maximum_frequency
+        ifo.minimum_frequency = minimum_frequency
     return ifos, on_source_data, off_source_data
 
 

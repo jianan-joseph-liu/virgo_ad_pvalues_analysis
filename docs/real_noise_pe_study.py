@@ -36,20 +36,7 @@ waveform_generator = bilby.gw.WaveformGenerator(
 
 # DONT ANALYSE THESE FOR NOW -- TO SPEED UP
 fixed_analysis_params = [
-    "a_1",
-    "a_2",
-    "tilt_1",
-    "tilt_2",
-    "phi_12",
-    "phi_jl",
-    "psi",
-    "ra",
-    "dec",
-    "geocent_time",
-    "phase",
-    # to make even faster
-    'theta_jn',
-    'luminosity_distance'
+    "geocent_time"
 ]
 
 
@@ -279,7 +266,7 @@ def estimate_sgvb_psd(time_series, sampling_frequency, duration=4,
         n_elbo_maximisation_steps=600,
         frange=frange
     )
-    psd_est.run(lr=0.008)
+    psd_est.run(lr=0.0078)
     freqs = psd_est.freq
     psd = psd_est.pointwise_ci[1]
     psd = psd*2 / Ew**2
@@ -291,13 +278,13 @@ def run_pe_study(
         sampling_frequency_local=sampling_frequency,
         minimum_frequency_local=minimum_frequency,
         maximum_frequency_local=maximum_frequency,
-        outdir="outdir_real_noise_pe_study",
+        outdir="outdir_pe_study",
         sgvb_settings=None,
         seed=0,
 ):
     bilby.core.utils.random.seed(seed)
     label = f"seed_{seed}"
-    outdir = f"outdir_real_noise_pe_study/seed_{seed}"
+    outdir = f"outdir_pe_study/seed_{seed}"
 
     print(">>>> Running PE study with seed =", seed, " <<<<")
     ## SETUP INJECTION + PRIORS FOR ANALYSIS

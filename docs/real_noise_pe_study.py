@@ -482,10 +482,11 @@ def run_pe_study(
                 true_val = injection_params.get(p, np.nan)
                 bias = m - true_val
                 inside = 1 if (true_val >= q05 and true_val <= q95) else 0
+                cred_level = np.mean(s <= true_val)
     
                 g_method.create_dataset(
                     p,
-                    data=np.array([m, true_val, bias, w90, inside], dtype=float)
+                    data=np.array([m, true_val, bias, w90, inside, cred_level], dtype=float)
                 )
 
     meta = dict(

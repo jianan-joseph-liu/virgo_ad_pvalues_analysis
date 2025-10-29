@@ -11,10 +11,10 @@ import matplotlib.pyplot as plt
 import copy
 from bilby.gw.detector.psd import PowerSpectralDensity
 from matplotlib.lines import Line2D
-import os
 import multiprocessing as mp
 import sys
 import os, re, glob
+import h5py
 
 
 duration = 4.0
@@ -399,7 +399,6 @@ def run_pe_study(
             priors=analysis_prior,
             sampler="dynesty",
             npoints=1000,
-            checkpoint_interval=1000,
             npool=npool,
             queue_size=npool,
             injection_parameters=injection_params,
@@ -453,12 +452,41 @@ def run_pe_study(
                                 filename=outpath2,
                                 dpi=200)
 
-    # --- Save evidences (compact numeric file) ---
-    # write: logZ_welch, logZ_sgvb, logZ_original, logBF, BF as one row
-    os.makedirs(outdir, exist_ok=True)
-    ev = np.array([logZ_welch, logZ_sgvb, logBF, BF], dtype=float)
-    header = "logZ_welch logZ_sgvb logBF_sgvb_vs_welch BF_sgvb_vs_welch"
-    np.savetxt(os.path.join(outdir, f"{label}_evidences.txt"), ev.reshape(1, -1), header=header, fmt="%.6e")
+    # --- Save results (compact numeric file) ---
+    metrics_root = "outdir_pe_study"
+    os.makedirs(metrics_root, exist_ok=True)
+    metrics_path = os.path.join(metrics_root, "metrics.h5")
+    
+    with h5py.File(metrics_path, "a") as hf:
+        g_run = hf.create_group(label)
+        g_run.attrs["logZ_welch"] = logZ_welch
+        g_run.attrs["logZ_sgvb"]  = logZ_sgvb
+        g_run.attrs["logBF"]      = logBF
+    
+        for k, v in injection_params.items():
+            try:
+                g_run.attrs[f"inj_{k}"] = float(v)
+            except:
+                pass
+    
+        for method in ["welch", "sgvb"]:
+            g_method = g_run.create_group(method)
+            post_df = results[method].posterior
+            keys    = list(results[method].search_parameter_keys)
+    
+            for p in keys:
+                s   = post_df[p].to_numpy()
+                m   = np.mean(s)
+                q05, q95 = np.percentile(s, [5, 95])
+                w90 = q95 - q05
+                true_val = injection_params.get(p, np.nan)
+                bias = m - true_val
+                inside = 1 if (true_val >= q05 and true_val <= q95) else 0
+    
+                g_method.create_dataset(
+                    p,
+                    data=np.array([m, true_val, bias, w90, inside], dtype=float)
+                )
 
     meta = dict(
         welch_freq=freqs_welch,

@@ -1,5 +1,7 @@
+*.err
+*.out
 *.json
-outdir*
-*.png
 *.pickle
+*.png
+seed_*
 

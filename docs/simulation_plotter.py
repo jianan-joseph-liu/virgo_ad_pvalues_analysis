@@ -23,7 +23,7 @@ def _get_valid_params(result1, result2):
     - finite
     - non-zero variance
     """
-    inj = result2.true_injection_parameters
+    inj = result2.injection_parameters
 
     shared = (
         set(result1.posterior.columns)

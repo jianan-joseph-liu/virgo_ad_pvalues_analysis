@@ -49,7 +49,7 @@ def make_comparison_corner_plot(result_dict, fname):
         raise RuntimeError("No valid parameters to plot!")
 
     valid_params = sorted(valid_params)
-    print(f"✅ Plotting {len(valid_params)} parameters with injections:")
+    print(f"Plotting {len(valid_params)} parameters with injections:")
     print(valid_params)
 
     # --- Compute evidences and Bayes factor ---
@@ -74,7 +74,8 @@ def make_comparison_corner_plot(result_dict, fname):
             'smooth': 1.0,
             'max_n_ticks': 3,
             'quantiles': [0.05, 0.95]
-        }
+        },
+        save=False
     )
 
     # --- Legend ---

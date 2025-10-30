@@ -171,9 +171,7 @@ def make_waveform_overlays(result_dict, outdir):
             print(f"⚠️ Skipped {ifo}: {e}")
 
 
-# =========================================================
-# Batch driver with TQDM
-# =========================================================
+
 
 def process_all(result_root, outdir=None, save_inside=True):
     """
@@ -197,18 +195,29 @@ def process_all(result_root, outdir=None, save_inside=True):
 
     for seed_dir in tqdm(seed_dirs, desc="Processing seeds", unit="seed"):
         seed_name = os.path.basename(seed_dir)
-        results = load_results(seed_dir)
 
-        if save_inside:
-            plot_path = os.path.join(seed_dir, f"{seed_name}_comparison.png")
-            out_waveform = seed_dir
-        else:
-            os.makedirs(outdir, exist_ok=True)
-            plot_path = os.path.join(outdir, f"{seed_name}_comparison.png")
-            out_waveform = outdir
+        try:
+            results = load_results(seed_dir)
+        except Exception as e:
+            print(f"⚠️ Skipping {seed_name}: could not load results ({e})")
+            continue
 
-        make_comparison_corner_plot(results, plot_path)
-        make_waveform_overlays(results, out_waveform)
+        try:
+            if save_inside:
+                plot_path = os.path.join(seed_dir, f"{seed_name}_comparison.png")
+                out_waveform = seed_dir
+            else:
+                os.makedirs(outdir, exist_ok=True)
+                plot_path = os.path.join(outdir, f"{seed_name}_comparison.png")
+                out_waveform = outdir
+
+            make_comparison_corner_plot(results, plot_path)
+            make_waveform_overlays(results, out_waveform)
+
+        except Exception as e:
+            print(f"⚠️ Skipping {seed_name}: error during plotting ({e})")
+            continue
+
 
 
 # =========================================================

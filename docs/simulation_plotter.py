@@ -1,3 +1,45 @@
+#!/usr/bin/env python3
+import os
+import sys
+import glob
+import numpy as np
+import matplotlib.pyplot as plt
+from bilby.gw.result import CBCResult
+import bilby
+
+
+def load_results(result_dir):
+    """Load SGVB and Welch results as CBCResult objects."""
+    sgvb_file = glob.glob(os.path.join(result_dir, "*_sgvb_result.json"))[0]
+    welch_file = glob.glob(os.path.join(result_dir, "*_welch_result.json"))[0]
+
+    r_sgvb = CBCResult.from_json(sgvb_file)
+    r_welch = CBCResult.from_json(welch_file)
+
+    return {"sgvb": r_sgvb, "welch": r_welch}
+
+
+def _get_valid_params(result1, result2):
+    """Return parameters in both posteriors & injection dict with finite, non-constant samples."""
+    inj = result2.injection_parameters
+    shared = (
+        set(result1.posterior.columns)
+        & set(result2.posterior.columns)
+        & set(inj.keys())
+    )
+
+    valid = []
+    for p in shared:
+        a1, a2 = np.asarray(result1.posterior[p]), np.asarray(result2.posterior[p])
+        if np.all(np.isfinite(a1)) and np.all(np.isfinite(a2)) and np.std(a1) > 0 and np.std(a2) > 0:
+            valid.append(p)
+
+    valid.sort()
+    if not valid:
+        raise RuntimeError("No valid parameters to plot")
+    return valid
+
+
 def make_comparison_corner_plot(result_dict, fname):
     """Overlay SGVB vs Welch corner plots using Bilby's plot_multiple."""
     r1, r2 = result_dict["sgvb"], result_dict["welch"]
@@ -56,3 +98,40 @@ def make_comparison_corner_plot(result_dict, fname):
     plt.savefig(fname, dpi=200, bbox_inches="tight")
     plt.close(fig)
     print(f"✅ saved {fname}")
+
+
+def make_waveform_overlays(result_dict, outdir):
+    """Save waveform posterior overlays for each interferometer."""
+    r = result_dict["sgvb"]
+
+    # Handle dict or list storage
+    if isinstance(r.interferometers, dict):
+        ifos = list(r.interferometers.keys())
+    elif isinstance(r.interferometers, list):
+        ifos = [ifo.name for ifo in r.interferometers]
+    else:
+        raise TypeError(f"Unexpected interferometers type: {type(r.interferometers)}")
+
+    for ifo in ifos:
+        try:
+            r.plot_interferometer_waveform_posterior(interferometer=ifo, n_samples=500, save=False)
+            plt.title(f"{ifo} waveform posterior")
+            outpath = os.path.join(outdir, f"waveform_{ifo}.png")
+            plt.savefig(outpath, dpi=200)
+            plt.close()
+            print(f"✅ saved {outpath}")
+        except Exception as e:
+            print(f"⚠️ Skipped {ifo}: {e}")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        print("Usage: python compare_results.py OUTDIR RESULT_DIR")
+        sys.exit(1)
+
+    outdir, result_dir = sys.argv[1], sys.argv[2]
+    os.makedirs(outdir, exist_ok=True)
+
+    results = load_results(result_dir)
+    make_comparison_corner_plot(results, os.path.join(outdir, "comparison_corner.png"))
+    make_waveform_overlays(results, outdir)

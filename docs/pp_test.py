@@ -76,24 +76,31 @@ def make_pp_plot(credible_levels, filename="pp_plot.png", color="#1f77b4"):
         pvals.append(p)
         ax.plot(x, pp, color=color, alpha=0.3, lw=0.4)
 
+    # Clip and combine p-values
+    pvals = np.clip(pvals, 1e-300, 1.0)
     combined_p = scipy.stats.combine_pvalues(pvals)[1]
+
+    # styling
     ax.plot([0, 1], [0, 1], "k--", lw=1)
     ax.set(xlabel="Credible interval", ylabel="Fraction within C.I.", xlim=(0, 1), ylim=(0, 1))
     ax.set_title(f"N={N}, p={combined_p:.3f}")
-    ax.legend(
-        [
-            plt.Line2D([0], [0], color=color, lw=2, label="SGVB"),
-            plt.Line2D([0], [0], color=grays[0], lw=2, label="68%"),
-            plt.Line2D([0], [0], color=grays[1], lw=2, label="95%"),
-            plt.Line2D([0], [0], color=grays[2], lw=2, label="99.7%"),
-        ],
-        loc="upper left",
-        frameon=False,
-    )
+
+    # create handles + labels explicitly
+    handles = [
+        plt.Line2D([0], [0], color=color, lw=2),
+        plt.Line2D([0], [0], color=grays[0], lw=2),
+        plt.Line2D([0], [0], color=grays[1], lw=2),
+        plt.Line2D([0], [0], color=grays[2], lw=2),
+    ]
+    labels = ["SGVB", "68%", "95%", "99.7%"]
+
+    ax.legend(handles=handles, labels=labels, loc="upper left", frameon=False)
+
     fig.tight_layout()
     plt.savefig(filename, dpi=400)
     plt.close(fig)
     print(f"✅ saved {filename}")
+
 
 
 def main(result_root, out_png="pp_plot.png", pattern="*_sgvb_result.json"):

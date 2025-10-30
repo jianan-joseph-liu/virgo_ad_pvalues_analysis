@@ -97,8 +97,9 @@ def make_comparison_corner_plot(result_dict, fname):
     )
 
     plt.tight_layout()
+    print(f"Saving comparison corner plot to: {fname}")
     plt.savefig(fname, dpi=200)
-    print(f"✅ Saved comparison corner plot to: {fname}")
+    
 
 
 if __name__ == "__main__":

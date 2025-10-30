@@ -5,12 +5,13 @@ import glob
 import numpy as np
 import matplotlib.pyplot as plt
 import corner
+from tqdm.auto import tqdm
 from bilby.gw.result import CBCResult
 
 
-# ---------------------------------------------------------
+# =========================================================
 # Helper functions
-# ---------------------------------------------------------
+# =========================================================
 
 def load_results(result_dir):
     """Load SGVB and Welch results as CBCResult objects."""
@@ -60,9 +61,9 @@ def _extract_network_snr(result):
     return snr
 
 
-# ---------------------------------------------------------
-# Main plotting functions
-# ---------------------------------------------------------
+# =========================================================
+# Plotting functions
+# =========================================================
 
 def make_comparison_corner_plot(result_dict, fname):
     """Make manual corner plot overlaying SGVB and Welch results."""
@@ -114,10 +115,7 @@ def make_comparison_corner_plot(result_dict, fname):
     # --- legend handles ---
     h_sgvb = mpatches.Patch(color="#1f77b4", label=f"SGVB ($\\ln Z={lnZ1:.2f}$)")
     h_welch = mpatches.Patch(color="#2ca02c", label=f"Welch ($\\ln Z={lnZ2:.2f}$)")
-    h_truth = mlines.Line2D(
-        [], [], color="black", marker="x", linestyle="",
-        markersize=6, label="Truth"
-    )
+    h_truth = mlines.Line2D([], [], color="black", marker="x", linestyle="", markersize=6, label="Truth")
     handles = [h_sgvb, h_welch, h_truth]
 
     # Add legend in top-right of corner plot
@@ -173,18 +171,66 @@ def make_waveform_overlays(result_dict, outdir):
             print(f"⚠️ Skipped {ifo}: {e}")
 
 
-# ---------------------------------------------------------
+# =========================================================
+# Batch driver with TQDM
+# =========================================================
+
+def process_all(result_root, outdir=None, save_inside=True):
+    """
+    Loop over all result directories (e.g. seed_1, seed_2) under result_root.
+
+    Parameters
+    ----------
+    result_root : str
+        Directory containing subfolders with Bilby results.
+    outdir : str or None
+        If given and save_inside=False, save all plots here.
+    save_inside : bool
+        If True, saves plots inside each seed directory (default).
+    """
+    seed_dirs = sorted([d for d in glob.glob(os.path.join(result_root, "seed_*")) if os.path.isdir(d)])
+    if not seed_dirs:
+        print(f"❌ No seed_* directories found under {result_root}")
+        return
+
+    print(f"Found {len(seed_dirs)} result directories.")
+
+    for seed_dir in tqdm(seed_dirs, desc="Processing seeds", unit="seed"):
+        seed_name = os.path.basename(seed_dir)
+        results = load_results(seed_dir)
+
+        if save_inside:
+            plot_path = os.path.join(seed_dir, f"{seed_name}_comparison.png")
+            out_waveform = seed_dir
+        else:
+            os.makedirs(outdir, exist_ok=True)
+            plot_path = os.path.join(outdir, f"{seed_name}_comparison.png")
+            out_waveform = outdir
+
+        make_comparison_corner_plot(results, plot_path)
+        make_waveform_overlays(results, out_waveform)
+
+
+# =========================================================
 # Main entry point
-# ---------------------------------------------------------
+# =========================================================
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: python simulation_plotter.py OUTDIR RESULT_DIR")
+    if len(sys.argv) < 2:
+        print("Usage:")
+        print("  python simulation_plotter.py RESULT_ROOT [OUTDIR] [--flat]")
+        print("Examples:")
+        print("  python simulation_plotter.py out/")
+        print("  python simulation_plotter.py out/ plots/ --flat")
         sys.exit(1)
 
-    outdir, result_dir = sys.argv[1], sys.argv[2]
-    os.makedirs(outdir, exist_ok=True)
+    result_root = sys.argv[1]
+    outdir = None
+    save_inside = True
 
-    results = load_results(result_dir)
-    make_comparison_corner_plot(results, os.path.join(outdir, "comparison_corner.png"))
-    make_waveform_overlays(results, outdir)
+    if len(sys.argv) >= 3:
+        outdir = sys.argv[2]
+    if "--flat" in sys.argv:
+        save_inside = False
+
+    process_all(result_root, outdir=outdir, save_inside=save_inside)

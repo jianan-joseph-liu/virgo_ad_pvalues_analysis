@@ -61,7 +61,7 @@ def make_comparison_corner_plot(result_dict, fname):
     params = _get_valid_params(r1, r2)
     print(f"Plotting params: {params}")
 
-    inj = r2.true_injection_parameters
+    inj = r2.injection_parameters
     truths = [inj[p] for p in params]
 
     # We'll plot SGVB and Welch as two overlaid corner plots:
@@ -73,7 +73,7 @@ def make_comparison_corner_plot(result_dict, fname):
     fig = corner.corner(
         samples1,
         labels=params,
-        truths=truths,              # <-- manual truth markers
+        truths=truths,             
         color="#1f77b4",
         truth_color="black",
         hist_kwargs={"density": True},

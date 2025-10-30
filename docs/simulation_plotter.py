@@ -18,7 +18,7 @@ def load_results(result_dir: str) -> Dict[str, bilby.gw.result.CBCResult]:
     welch_files = glob.glob(os.path.join(result_dir, '*_welch_result.json'))
 
     if not sgvb_files or not welch_files:
-        raise FileNotFoundError("Could not find both SGVB and Welch result files in directory.")
+        raise FileNotFoundError(f"Could not find both SGVB and Welch result files in directory. {result_dir}")
 
     sgvb_result = bilby.result.read_in_result(sgvb_files[0])
     welch_result = bilby.result.read_in_result(welch_files[0])
@@ -26,25 +26,44 @@ def load_results(result_dir: str) -> Dict[str, bilby.gw.result.CBCResult]:
     return dict(sgvb=sgvb_result, welch=welch_result)
 
 
-def make_comparison_corner_plot(result_dict: Dict[str, bilby.gw.result.CBCResult], fname: str):
-    """
-    Compare SGVB vs Welch results using a corner plot with Bayes factors and injection truth.
-    """
+def make_comparison_corner_plot(result_dict, fname):
     result1 = result_dict['sgvb']
     result2 = result_dict['welch']
 
+    # --- Select parameters that appear in both posteriors and injection dict ---
+    inj_params = result2.true_injection_parameters  # Usually both results share same injection
+    shared_params = set(result1.posterior.columns) & set(result2.posterior.columns) & set(inj_params.keys())
+
+    # Filter only those that are finite and have variation
+    valid_params = []
+    for p in shared_params:
+        arr1 = np.asarray(result1.posterior[p])
+        arr2 = np.asarray(result2.posterior[p])
+        if (
+            np.all(np.isfinite(arr1)) and np.all(np.isfinite(arr2))
+            and np.std(arr1) > 0 and np.std(arr2) > 0
+        ):
+            valid_params.append(p)
+
+    if not valid_params:
+        raise RuntimeError("No valid parameters to plot!")
+
+    valid_params = sorted(valid_params)
+    print(f"✅ Plotting {len(valid_params)} parameters with injections:")
+    print(valid_params)
+
+    # --- Compute evidences and Bayes factor ---
     ln_Z1 = result1.log_evidence
     ln_Z2 = result2.log_evidence
     Bf_1_vs_2 = ln_Z1 - ln_Z2
 
-    parameters_to_plot = list(result1.posterior.keys())
+    color1 = '#1f77b4'
+    color2 = '#2ca02c'
 
-    color1 = '#1f77b4'  # blue
-    color2 = '#2ca02c'  # green
-
+    # --- Corner plot ---
     fig = bilby.result.plot_multiple(
         results=[result1, result2],
-        parameters=parameters_to_plot,
+        parameters=valid_params,
         priors=True,
         plot_injection=True,
         labels=['SGVB', 'Welch'],
@@ -58,6 +77,7 @@ def make_comparison_corner_plot(result_dict: Dict[str, bilby.gw.result.CBCResult
         }
     )
 
+    # --- Legend ---
     legend_label_1 = f'{result1.label} ($\\ln Z = {ln_Z1:.2f}$)'
     legend_label_2 = f'{result2.label} ($\\ln Z = {ln_Z2:.2f}$)'
     Bf_label = f'Bayes Factor (SGVB/Welch): $\\ln \\mathcal{{B}} = {Bf_1_vs_2:.2f}$'
@@ -68,11 +88,16 @@ def make_comparison_corner_plot(result_dict: Dict[str, bilby.gw.result.CBCResult
     true_marker = plt.Line2D([0], [0], color='black', marker='x', linestyle='', label='True Injection')
 
     ax = fig.axes[0]
-    handles = [patch1, patch2, true_marker, patch_bf]
-    ax.legend(handles=handles, loc='upper right', bbox_to_anchor=(1.0, 1.0), frameon=True, fontsize=10)
+    ax.legend(
+        handles=[patch1, patch2, true_marker, patch_bf],
+        loc='upper right',
+        bbox_to_anchor=(1.0, 1.0),
+        frameon=True,
+        fontsize=10
+    )
 
     plt.tight_layout()
-    plt.savefig(fname)
+    plt.savefig(fname, dpi=200)
     print(f"✅ Saved comparison corner plot to: {fname}")
 
 

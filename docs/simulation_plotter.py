@@ -101,18 +101,26 @@ def make_comparison_corner_plot(result_dict, fname):
 
 
 def make_waveform_overlays(result_dict, outdir):
-    """Save waveform posterior overlays for each IFO."""
+    """Save waveform posterior overlays for each interferometer."""
     r = result_dict["sgvb"]
-    if isinstance(r.interferometers, dict):
-        ifos = list(r.interferometers.keys())
-    elif isinstance(r.interferometers, list):
-        ifos = [ifo.name for ifo in r.interferometers]
+    ifos_attr = r.interferometers
+
+    # Handle dict, list of Interferometer objects, or list of names
+    if isinstance(ifos_attr, dict):
+        ifos = list(ifos_attr.keys())
+    elif isinstance(ifos_attr, list):
+        if len(ifos_attr) > 0 and hasattr(ifos_attr[0], "name"):
+            ifos = [ifo.name for ifo in ifos_attr]
+        else:
+            ifos = [str(ifo) for ifo in ifos_attr]
     else:
-        raise TypeError(f"Unexpected interferometers type: {type(r.interferometers)}")
+        raise TypeError(f"Unexpected interferometers type: {type(ifos_attr)}")
 
     for ifo in ifos:
         try:
-            r.plot_interferometer_waveform_posterior(interferometer=ifo, n_samples=500, save=False)
+            r.plot_interferometer_waveform_posterior(
+                interferometer=ifo, n_samples=500, save=False
+            )
             plt.title(f"{ifo} waveform posterior")
             outpath = os.path.join(outdir, f"waveform_{ifo}.png")
             plt.savefig(outpath, dpi=200)

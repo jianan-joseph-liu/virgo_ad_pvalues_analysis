@@ -1,116 +1,162 @@
 import os
 import sys
 import glob
-import shutil
 import numpy as np
-import bilby
-import corner
 import matplotlib.pyplot as plt
-from tqdm.auto import tqdm
-from typing import Dict
+import bilby
+from bilby.gw.result import CBCResult
 
 
-def load_results(result_dir: str) -> Dict[str, bilby.gw.result.CBCResult]:
+def load_results(result_dir):
+    sgvb_file = glob.glob(os.path.join(result_dir, "*_sgvb_result.json"))[0]
+    welch_file = glob.glob(os.path.join(result_dir, "*_welch_result.json"))[0]
+    r_sgvb = bilby.result.read_in_result(sgvb_file)
+    r_welch = bilby.result.read_in_result(welch_file)
+    return {"sgvb": r_sgvb, "welch": r_welch}
+
+
+def _get_valid_params(result1, result2):
     """
-    Load Bilby result files for SGVB and Welch analyses.
+    Pick parameters:
+    - in both posteriors
+    - present in injection dict
+    - finite
+    - non-zero variance
     """
-    sgvb_files = glob.glob(os.path.join(result_dir, '*_sgvb_result.json'))
-    welch_files = glob.glob(os.path.join(result_dir, '*_welch_result.json'))
+    inj = result2.true_injection_parameters
 
-    if not sgvb_files or not welch_files:
-        raise FileNotFoundError(f"Could not find both SGVB and Welch result files in directory. {result_dir}")
+    shared = (
+        set(result1.posterior.columns)
+        & set(result2.posterior.columns)
+        & set(inj.keys())
+    )
 
-    sgvb_result = bilby.result.read_in_result(sgvb_files[0])
-    welch_result = bilby.result.read_in_result(welch_files[0])
+    valid = []
+    for p in shared:
+        a1 = np.asarray(result1.posterior[p])
+        a2 = np.asarray(result2.posterior[p])
+        if (
+            np.all(np.isfinite(a1))
+            and np.all(np.isfinite(a2))
+            and np.std(a1) > 0
+            and np.std(a2) > 0
+        ):
+            valid.append(p)
 
-    return dict(sgvb=sgvb_result, welch=welch_result)
+    valid = sorted(valid)
+    if not valid:
+        raise RuntimeError("No valid parameters to plot")
+
+    return valid
 
 
 def make_comparison_corner_plot(result_dict, fname):
-    result1 = result_dict['sgvb']
-    result2 = result_dict['welch']
+    r1 = result_dict["sgvb"]
+    r2 = result_dict["welch"]
 
-    # --- Select parameters that appear in both posteriors and injection dict ---
-    inj_params = result2.injection_parameters  # Usually both results share same injection
-    shared_params = set(result1.posterior.columns) & set(result2.posterior.columns) & set(inj_params.keys())
+    lnZ1 = r1.log_evidence
+    lnZ2 = r2.log_evidence
+    bf = lnZ1 - lnZ2
 
-    # Filter only those that are finite and have variation
-    valid_params = []
-    for p in shared_params:
-        arr1 = np.asarray(result1.posterior[p])
-        arr2 = np.asarray(result2.posterior[p])
-        if (
-            np.all(np.isfinite(arr1)) and np.all(np.isfinite(arr2))
-            and np.std(arr1) > 0 and np.std(arr2) > 0
-        ):
-            valid_params.append(p)
+    params = _get_valid_params(r1, r2)
+    print(f"Plotting params: {params}")
 
-    if not valid_params:
-        raise RuntimeError("No valid parameters to plot!")
+    inj = r2.true_injection_parameters
+    truths = [inj[p] for p in params]
 
-    valid_params = sorted(valid_params)
-    print(f"Plotting {len(valid_params)} parameters with injections:")
-    print(valid_params)
+    # We'll plot SGVB and Welch as two overlaid corner plots:
+    import corner
 
-    # --- Compute evidences and Bayes factor ---
-    ln_Z1 = result1.log_evidence
-    ln_Z2 = result2.log_evidence
-    Bf_1_vs_2 = ln_Z1 - ln_Z2
+    samples1 = np.column_stack([np.asarray(r1.posterior[p]) for p in params])
+    samples2 = np.column_stack([np.asarray(r2.posterior[p]) for p in params])
 
-    color1 = '#1f77b4'
-    color2 = '#2ca02c'
-
-    # --- Corner plot ---
-    fig = bilby.result.plot_multiple(
-        results=[result1, result2],
-        parameters=valid_params,
-        priors=True,
-        plot_injection=True,
-        labels=['SGVB', 'Welch'],
-        colour_list=[color1, color2],
-        figsize=(8, 8),
-        corner_kwargs={
-            'hist_kwargs': {'density': True},
-            'smooth': 1.0,
-            'max_n_ticks': 3,
-            'quantiles': [0.05, 0.95]
-        },
-        save=False
+    fig = corner.corner(
+        samples1,
+        labels=params,
+        truths=truths,              # <-- manual truth markers
+        color="#1f77b4",
+        truth_color="black",
+        hist_kwargs={"density": True},
+        smooth=1.0,
+        max_n_ticks=3,
+        quantiles=[0.05, 0.95],
+        show_titles=False,
+        label_kwargs={"fontsize": 10},
     )
 
-    # --- Legend ---
-    legend_label_1 = f'{result1.label} ($\\ln Z = {ln_Z1:.2f}$)'
-    legend_label_2 = f'{result2.label} ($\\ln Z = {ln_Z2:.2f}$)'
-    Bf_label = f'Bayes Factor (SGVB/Welch): $\\ln \\mathcal{{B}} = {Bf_1_vs_2:.2f}$'
+    corner.corner(
+        samples2,
+        fig=fig,
+        labels=params,
+        color="#2ca02c",
+        hist_kwargs={"density": True},
+        smooth=1.0,
+        max_n_ticks=3,
+        quantiles=[0.05, 0.95],
+        show_titles=False,
+        label_kwargs={"fontsize": 10},
+    )
 
-    patch1 = plt.matplotlib.patches.Patch(color=color1, label=legend_label_1)
-    patch2 = plt.matplotlib.patches.Patch(color=color2, label=legend_label_2)
-    patch_bf = plt.matplotlib.patches.Patch(color='none', label=Bf_label)
-    true_marker = plt.Line2D([0], [0], color='black', marker='x', linestyle='', label='True Injection')
+    # Build legend
+    lab1 = f"{r1.label} ($\\ln Z={lnZ1:.2f}$)"
+    lab2 = f"{r2.label} ($\\ln Z={lnZ2:.2f}$)"
+    lab3 = f"$\\ln\\mathcal{{B}}_{{\\mathrm{{SGVB/Welch}}}}={bf:.2f}$"
 
-    ax = fig.axes[0]
-    ax.legend(
-        handles=[patch1, patch2, true_marker, patch_bf],
-        loc='upper right',
-        bbox_to_anchor=(1.0, 1.0),
-        frameon=True,
-        fontsize=10
+    handles = [
+        plt.matplotlib.patches.Patch(color="#1f77b4", label=lab1),
+        plt.matplotlib.patches.Patch(color="#2ca02c", label=lab2),
+        plt.Line2D([0], [0], color="black", ls="-", marker="o", markersize=4,
+                   markerfacecolor="black", label="truth"),
+        plt.matplotlib.patches.Patch(color="none", label=lab3),
+    ]
+
+    # "Top right" of the first axis in the grid = use the first axis
+    ax0 = fig.axes[0]
+    ax0.legend(
+        handles=handles,
+        loc="upper right",
+        frameon=False,   # <-- no frame
+        fontsize=12,
     )
 
     plt.tight_layout()
-    print(f"Saving comparison corner plot to: {fname}")
     plt.savefig(fname, dpi=200)
-    
+    plt.close(fig)
+    print(f"✅ saved {fname}")
+
+
+def make_waveform_overlays(result_dict, outdir):
+    """
+    For each IFO, save waveform posterior overlay.
+    Uses Bilby's plot_interferometer_waveform_posterior with save=False.
+    """
+    r = result_dict["sgvb"]  # choose whichever sampler you trust for waveform posterior
+    ifos = list(r.interferometers.keys())
+
+    for ifo in ifos:
+        r.plot_interferometer_waveform_posterior(
+            interferometer=ifo,
+            n_samples=500,
+            save=False,
+        )
+        plt.title(f"{ifo} waveform posterior")
+        outpath = os.path.join(outdir, f"waveform_{ifo}.png")
+        plt.savefig(outpath, dpi=200)
+        plt.close()
+        print(f"✅ saved {outpath}")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: python compare_results.py <output_dir> <result_dir>")
-        sys.exit(1)
-
+    # usage: python compare_results.py OUTDIR RESULT_DIR
     outdir = sys.argv[1]
     result_dir = sys.argv[2]
 
     os.makedirs(outdir, exist_ok=True)
+
     results = load_results(result_dir)
+
+    # corner-style PE comparison with truths, legend, Bayes factor
     make_comparison_corner_plot(results, os.path.join(outdir, "comparison_corner.png"))
+
+    # interferometer waveform posterior plots saved alongside
+    make_waveform_overlays(results, outdir)

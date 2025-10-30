@@ -8,6 +8,10 @@ import corner
 from bilby.gw.result import CBCResult
 
 
+# ---------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------
+
 def load_results(result_dir):
     """Load SGVB and Welch results as CBCResult objects."""
     sgvb_file = glob.glob(os.path.join(result_dir, "*_sgvb_result.json"))[0]
@@ -26,22 +30,49 @@ def _get_valid_params(result1, result2):
         & set(inj.keys())
     )
     valid = []
-    for p in shared:
+    for p in sorted(shared):
         a1, a2 = np.asarray(result1.posterior[p]), np.asarray(result2.posterior[p])
         if np.all(np.isfinite(a1)) and np.all(np.isfinite(a2)) and np.std(a1) > 0 and np.std(a2) > 0:
             valid.append(p)
-    valid.sort()
     if not valid:
         raise RuntimeError("No valid parameters to plot.")
     return valid
 
 
+def _extract_network_snr(result):
+    """Compute network SNR = sqrt(sum_i SNR_i^2) from meta_data."""
+    snr = np.nan
+    try:
+        snrs = []
+        if (
+            hasattr(result, "meta_data")
+            and "likelihood" in result.meta_data
+            and "interferometers" in result.meta_data["likelihood"]
+        ):
+            for ifo, info in result.meta_data["likelihood"]["interferometers"].items():
+                if isinstance(info, dict) and "optimal_SNR" in info:
+                    snrs.append(float(info["optimal_SNR"]))
+            if snrs:
+                snr = np.sqrt(np.sum(np.square(snrs)))
+                print(f"Network SNR from interferometers: {snrs} → {snr:.2f}")
+    except Exception as e:
+        print(f"⚠️ Could not extract network SNR: {e}")
+    return snr
+
+
+# ---------------------------------------------------------
+# Main plotting functions
+# ---------------------------------------------------------
+
 def make_comparison_corner_plot(result_dict, fname):
     """Make manual corner plot overlaying SGVB and Welch results."""
+    import matplotlib.patches as mpatches
+    import matplotlib.lines as mlines
+
     r1, r2 = result_dict["sgvb"], result_dict["welch"]
     lnZ1, lnZ2 = r1.log_evidence, r2.log_evidence
     bf = lnZ1 - lnZ2
-    snr = r2.injection_parameters.get("optimal_snr", np.nan)
+    snr = _extract_network_snr(r2)
 
     params = _get_valid_params(r1, r2)
     print(f"Plotting params: {params}")
@@ -52,7 +83,7 @@ def make_comparison_corner_plot(result_dict, fname):
     samples1 = np.column_stack([np.asarray(r1.posterior[p]) for p in params])
     samples2 = np.column_stack([np.asarray(r2.posterior[p]) for p in params])
 
-    # First dataset
+    # --- main corner overlay ---
     fig = corner.corner(
         samples1,
         labels=params,
@@ -67,7 +98,6 @@ def make_comparison_corner_plot(result_dict, fname):
         label_kwargs={"fontsize": 10},
     )
 
-    # Overlay second dataset
     corner.corner(
         samples2,
         fig=fig,
@@ -81,17 +111,32 @@ def make_comparison_corner_plot(result_dict, fname):
         label_kwargs={"fontsize": 10},
     )
 
-    # Global annotation box (figure coords)
-    text = (
-        f"SGVB: $\\ln Z={lnZ1:.2f}$\n"
-        f"Welch: $\\ln Z={lnZ2:.2f}$\n"
-        f"$\\ln\\mathcal{{B}}_{{SGVB/Welch}}={bf:.2f}$\n"
-        f"SNR: {snr:.2f}"
+    # --- legend handles ---
+    h_sgvb = mpatches.Patch(color="#1f77b4", label=f"SGVB ($\\ln Z={lnZ1:.2f}$)")
+    h_welch = mpatches.Patch(color="#2ca02c", label=f"Welch ($\\ln Z={lnZ2:.2f}$)")
+    h_truth = mlines.Line2D(
+        [], [], color="black", marker="x", linestyle="",
+        markersize=6, label="Truth"
     )
+    handles = [h_sgvb, h_welch, h_truth]
+
+    # Add legend in top-right of corner plot
+    ax0 = fig.axes[0]
+    ax0.legend(
+        handles=handles,
+        loc="upper right",
+        bbox_to_anchor=(1.0, 1.0),
+        frameon=False,
+        fontsize=12,
+    )
+
+    # --- textbox with Bayes factor + SNR ---
     fig.text(
-        0.98, 0.98, text,
-        ha="right", va="top",
-        fontsize=14,
+        0.98, 0.92,
+        f"$\\ln\\mathcal{{B}}_{{SGVB/Welch}}={bf:.2f}$\nSNR(network): {snr:.2f}",
+        ha="right",
+        va="top",
+        fontsize=13,
         bbox=dict(boxstyle="round,pad=0.4", facecolor="white", alpha=0.6, lw=0),
     )
 
@@ -101,7 +146,7 @@ def make_comparison_corner_plot(result_dict, fname):
 
 
 def make_waveform_overlays(result_dict, outdir):
-    """Save waveform posterior overlays for each interferometer."""
+    """Save waveform posterior overlays for each IFO."""
     r = result_dict["sgvb"]
     ifos_attr = r.interferometers
 
@@ -118,9 +163,7 @@ def make_waveform_overlays(result_dict, outdir):
 
     for ifo in ifos:
         try:
-            r.plot_interferometer_waveform_posterior(
-                interferometer=ifo, n_samples=500, save=False
-            )
+            r.plot_interferometer_waveform_posterior(interferometer=ifo, n_samples=500, save=False)
             plt.title(f"{ifo} waveform posterior")
             outpath = os.path.join(outdir, f"waveform_{ifo}.png")
             plt.savefig(outpath, dpi=200)
@@ -130,9 +173,13 @@ def make_waveform_overlays(result_dict, outdir):
             print(f"⚠️ Skipped {ifo}: {e}")
 
 
+# ---------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------
+
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: python compare_results.py OUTDIR RESULT_DIR")
+        print("Usage: python simulation_plotter.py OUTDIR RESULT_DIR")
         sys.exit(1)
 
     outdir, result_dir = sys.argv[1], sys.argv[2]

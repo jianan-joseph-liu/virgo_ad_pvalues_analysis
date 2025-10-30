@@ -31,7 +31,7 @@ def make_comparison_corner_plot(result_dict, fname):
     result2 = result_dict['welch']
 
     # --- Select parameters that appear in both posteriors and injection dict ---
-    inj_params = result2.true_injection_parameters  # Usually both results share same injection
+    inj_params = result2.injection_parameters  # Usually both results share same injection
     shared_params = set(result1.posterior.columns) & set(result2.posterior.columns) & set(inj_params.keys())
 
     # Filter only those that are finite and have variation

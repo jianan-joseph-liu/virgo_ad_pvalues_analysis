@@ -5,6 +5,7 @@ import glob
 import numpy as np
 import matplotlib.pyplot as plt
 import corner
+import scipy.stats
 from tqdm.auto import tqdm
 from bilby.gw.result import CBCResult
 
@@ -62,7 +63,7 @@ def _extract_network_snr(result):
 
 
 # =========================================================
-# Plotting functions
+# Corner + Waveform plotting
 # =========================================================
 
 def make_comparison_corner_plot(result_dict, fname):
@@ -118,7 +119,6 @@ def make_comparison_corner_plot(result_dict, fname):
     h_truth = mlines.Line2D([], [], color="black", marker="x", linestyle="", markersize=6, label="Truth")
     handles = [h_sgvb, h_welch, h_truth]
 
-    # Add legend in top-right of corner plot
     ax0 = fig.axes[0]
     ax0.legend(
         handles=handles,
@@ -148,7 +148,6 @@ def make_waveform_overlays(result_dict, outdir):
     r = result_dict["sgvb"]
     ifos_attr = r.interferometers
 
-    # Handle dict, list of Interferometer objects, or list of names
     if isinstance(ifos_attr, dict):
         ifos = list(ifos_attr.keys())
     elif isinstance(ifos_attr, list):
@@ -171,31 +170,110 @@ def make_waveform_overlays(result_dict, outdir):
             print(f"⚠️ Skipped {ifo}: {e}")
 
 
+# =========================================================
+# P–P plot utilities
+# =========================================================
 
+def compute_credible_levels(result_dirs, parameters=None):
+    """Compute credible levels for SGVB posteriors vs true injections."""
+    result_files = []
+    for d in result_dirs:
+        matches = glob.glob(os.path.join(d, "*_sgvb_result.json"))
+        if matches:
+            result_files.append(matches[0])
+    if not result_files:
+        print("❌ No SGVB results found.")
+        return None, None
+
+    first = CBCResult.from_json(result_files[0])
+    inj = first.injection_parameters
+    post = first.posterior
+    if parameters is None:
+        parameters = sorted(set(post.columns) & set(inj.keys()))
+
+    credible_levels = np.zeros((len(parameters), len(result_files)))
+    for ri, f in enumerate(tqdm(result_files, desc="Computing credible levels")):
+        try:
+            res = CBCResult.from_json(f)
+            inj = res.injection_parameters
+            post = res.posterior
+            for pi, p in enumerate(parameters):
+                if p not in post.columns or p not in inj:
+                    credible_levels[pi, ri] = np.nan
+                    continue
+                samples = np.asarray(post[p])
+                true_val = inj[p]
+                credible_levels[pi, ri] = np.mean(samples < true_val)
+        except Exception as e:
+            print(f"⚠️ Skipped {f}: {e}")
+            credible_levels[:, ri] = np.nan
+    return np.array(parameters), credible_levels
+
+
+def make_pp_plot(credible_levels, filename="pp_plot.png", color="#1f77b4"):
+    """Generate the P–P plot."""
+    x_values = np.linspace(0, 1, 1001)
+    credible_levels = credible_levels[~np.isnan(credible_levels).any(axis=1)]
+    dim, N = credible_levels.shape
+    if N <= dim:
+        print(f"⚠️ Warning: N={N} ≤ dim={dim}, results may be noisy")
+
+    fig, ax = plt.subplots(figsize=(3.5, 3.5))
+    grays = plt.cm.Greys(np.linspace(0.2, 0.5, 3))
+
+    # confidence regions
+    for i, ci in enumerate([0.68, 0.95, 0.997][::-1]):
+        edge = (1 - ci) / 2
+        lower = scipy.stats.binom.ppf(edge, N, x_values) / N
+        upper = scipy.stats.binom.ppf(1 - edge, N, x_values) / N
+        ax.fill_between(x_values, lower, upper, color=grays[i], lw=0)
+        ax.plot(x_values, lower, color=grays[i], lw=1)
+        ax.plot(x_values, upper, color=grays[i], lw=1)
+
+    # individual parameters
+    pvalues = []
+    for i in range(len(credible_levels)):
+        pp = np.array([(credible_levels[i] < x).mean() for x in x_values])
+        pvalue = scipy.stats.kstest(credible_levels[i], "uniform").pvalue
+        pvalues.append(pvalue)
+        ax.plot(x_values, pp, color=color, alpha=0.3, lw=0.4)
+
+    combined_pvalue = scipy.stats.combine_pvalues(pvalues)[1]
+    ax.plot([0, 1], [0, 1], "k--", lw=1)
+    ax.set_xlabel("Credible interval")
+    ax.set_ylabel("Fraction within C.I.")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_title(f"N={N}, p={combined_pvalue:.4f}")
+    ax.legend(
+        [
+            plt.Line2D([0], [0], color=color, lw=2, label="SGVB"),
+            plt.Line2D([0], [0], color=grays[0], lw=2, label="68%"),
+            plt.Line2D([0], [0], color=grays[1], lw=2, label="95%"),
+            plt.Line2D([0], [0], color=grays[2], lw=2, label="99.7%"),
+        ],
+        loc="upper left",
+        frameon=False,
+    )
+    fig.tight_layout()
+    plt.savefig(filename, dpi=400)
+    plt.close(fig)
+    print(f"✅ saved {filename}")
+
+
+# =========================================================
+# Batch processor
+# =========================================================
 
 def process_all(result_root, outdir=None, save_inside=True):
-    """
-    Loop over all result directories (e.g. seed_1, seed_2) under result_root.
-
-    Parameters
-    ----------
-    result_root : str
-        Directory containing subfolders with Bilby results.
-    outdir : str or None
-        If given and save_inside=False, save all plots here.
-    save_inside : bool
-        If True, saves plots inside each seed directory (default).
-    """
     seed_dirs = sorted([d for d in glob.glob(os.path.join(result_root, "seed_*")) if os.path.isdir(d)])
     if not seed_dirs:
         print(f"❌ No seed_* directories found under {result_root}")
         return
 
     print(f"Found {len(seed_dirs)} result directories.")
-
     for seed_dir in tqdm(seed_dirs, desc="Processing seeds", unit="seed"):
         seed_name = os.path.basename(seed_dir)
-
         try:
             results = load_results(seed_dir)
         except Exception as e:
@@ -218,25 +296,26 @@ def process_all(result_root, outdir=None, save_inside=True):
             print(f"⚠️ Skipping {seed_name}: error during plotting ({e})")
             continue
 
+    # After all seeds → make PP plot
+    print("\n📊 Generating combined P–P plot across all seeds...")
+    params, credible_levels = compute_credible_levels(seed_dirs)
+    if credible_levels is not None:
+        make_pp_plot(credible_levels, filename=os.path.join(result_root, "pp_plot.png"), color="#1f77b4")
 
 
 # =========================================================
-# Main entry point
+# Main entry
 # =========================================================
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage:")
         print("  python simulation_plotter.py RESULT_ROOT [OUTDIR] [--flat]")
-        print("Examples:")
-        print("  python simulation_plotter.py out/")
-        print("  python simulation_plotter.py out/ plots/ --flat")
         sys.exit(1)
 
     result_root = sys.argv[1]
     outdir = None
     save_inside = True
-
     if len(sys.argv) >= 3:
         outdir = sys.argv[2]
     if "--flat" in sys.argv:

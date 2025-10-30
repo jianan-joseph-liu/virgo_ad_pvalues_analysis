@@ -18,7 +18,7 @@ def load_results(result_dir: str) -> Dict[str, bilby.gw.result.CBCResult]:
     welch_files = glob.glob(os.path.join(result_dir, '*_welch_result.json'))
 
     if not sgvb_files or not welch_files:
-        raise FileNotFoundError("Could not find both SGVB and Welch result files in directory.")
+        raise FileNotFoundError(f"Could not find both SGVB and Welch result files in directory. {result_dir}")
 
     sgvb_result = bilby.result.read_in_result(sgvb_files[0])
     welch_result = bilby.result.read_in_result(welch_files[0])

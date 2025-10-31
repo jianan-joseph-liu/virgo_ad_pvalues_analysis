@@ -1,0 +1,7 @@
+*.err
+*.out
+*.json
+*.pickle
+*.png
+seed_*
+

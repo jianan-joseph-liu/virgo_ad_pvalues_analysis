@@ -11,13 +11,16 @@ import matplotlib.pyplot as plt
 import copy
 from bilby.gw.detector.psd import PowerSpectralDensity
 from matplotlib.lines import Line2D
-import os
 import multiprocessing as mp
 import sys
+import os, re, glob
+import h5py
+
 
 duration = 4.0
-sampling_frequency = 2048.0
+sampling_frequency = 4096.0
 minimum_frequency = 20
+maximum_frequency = 896
 waveform_generator = bilby.gw.WaveformGenerator(
     duration=duration,
     sampling_frequency=sampling_frequency,
@@ -27,39 +30,97 @@ waveform_generator = bilby.gw.WaveformGenerator(
         waveform_approximant="IMRPhenomPv2",
         reference_frequency=50.0,
         minimum_frequency=minimum_frequency,
+        maximum_frequency=maximum_frequency
     ),
 )
+
 # DONT ANALYSE THESE FOR NOW -- TO SPEED UP
 fixed_analysis_params = [
-    "a_1",
-    "a_2",
-    "tilt_1",
-    "tilt_2",
-    "phi_12",
-    "phi_jl",
-    "psi",
-    "ra",
-    "dec",
-    "geocent_time",
-    "phase",
-    # to make even faster
-    'theta_jn',
-    'luminosity_distance'
+    "geocent_time"
 ]
 
 
-def prepare_interferometers(det_names, sampling_frequency, duration, start_time):
+'''
+# get the files that corresponds to the GPS time
+'''
+data_dir = "/datasets/LIGO/public/gwosc.osgstorage.org/gwdata/O3b/strain.4k/hdf.v1/H1/"
+
+def _get_data_files_and_gps_times(data_dir: str):
+    
+    search_str = os.path.join(data_dir, "*/*.hdf5")
+    files = glob.glob(search_str)
+    if not files:
+        raise FileNotFoundError(f"No HDF5 files found at {search_str}")
+
+    result = []
+    
+    for f in files:
+        m = re.search(r"R1-(\d+)-(\d+)\.hdf5", f)
+        if m:
+            start = int(m.group(1))
+            dur   = int(m.group(2))
+            stop  = start + dur
+            result.append((start, stop, f))
+
+    result.sort(key=lambda x: x[0])
+    return result
+
+
+def load_local_ts(data_dir, t0, t1):
+    pieces = []
+    for start, stop, path in _get_data_files_and_gps_times(data_dir):
+        if stop <= t0:
+            continue
+        if start >= t1:
+            break
+        seg_start = max(t0, start)
+        seg_stop  = min(t1, stop)
+        ts = TimeSeries.read(path, format='hdf5.gwosc', start=seg_start, end=seg_stop)
+        pieces.append(ts)
+
+    if not pieces:
+        raise ValueError("No files covering this period of time")
+
+    return pieces
+
+
+'''
+# get noise data, start from GPS time = 1256664443.
+'''
+segment_file = "H1_valid_segments_1256664443-1269361988.txt"
+def get_noise_segment_from_seed(segment_file, data_dir, seed):
+    segments = np.loadtxt(segment_file, dtype=np.int64, skiprows=1)
+    t0, t1 = segments[seed]
+    pieces = load_local_ts(data_dir, t0, t1)
+    y = np.concatenate([p.value for p in pieces])
+    return y, t0, t1
+
+
+def prepare_interferometers(det_names, sampling_frequency, duration, seed):
     """Create an InterferometerList and set strain data from PSDs.
 
     Returns the InterferometerList.
     """
     ifos = bilby.gw.detector.InterferometerList(det_names)
-    ifos.set_strain_data_from_power_spectral_densities(
-        sampling_frequency=sampling_frequency,
-        duration=duration,
-        start_time=start_time,
-    )
-    return ifos
+    
+    segment, t0, t1 = get_noise_segment_from_seed(segment_file, data_dir, seed)
+    start_time = t1 - duration
+    print('Start GPS time:', start_time, 'End GPS time:', t1)
+    boundary = int(32*sampling_frequency*duration)
+    on_source_data = segment[boundary: ]
+    off_source_data = segment[:boundary]
+    
+    for ifo in ifos:
+        ifo.strain_data.set_from_time_domain_strain(
+            time_domain_strain=on_source_data,
+            sampling_frequency=sampling_frequency,
+            start_time=start_time,
+            duration=duration
+        )
+        
+        ifo.maximum_frequency = maximum_frequency
+        ifo.minimum_frequency = minimum_frequency
+    return ifos, on_source_data, off_source_data
 
 
 def get_fd_data(strain_data: np.ndarray, times: np.ndarray, det: str, roll_off: float, fmin: float, fmax: float):
@@ -93,7 +154,7 @@ def estimate_welch_psd(
         psd_method: str = "median",
         psd_start_time: float | None = None,
         minimum_frequency: float | None = 20.0,
-        maximum_frequency: float | None = None,
+        maximum_frequency: float | None = 896.0,
         tukey_roll_off: float = 0.4,
 ):
     """
@@ -166,14 +227,29 @@ def estimate_welch_psd(
     return freqs_welch, psd
 
 
+def window_in_chunks(x: np.ndarray, n_chunks: int = 32, alpha: float = 0.4) -> np.ndarray:
+    """Split x into n_chunks, apply Tukey window to each chunk, and re-concatenate."""
+    N = x.size
+    seglen = N // n_chunks
+    w = tukey(seglen, alpha=alpha)
+    X = x.reshape(n_chunks, seglen) * w
+    return X.reshape(N)
+
+
 def estimate_sgvb_psd(time_series, sampling_frequency, duration=4,
-                      minimum_frequency = 20.0, maximum_frequency = None,
-                      N_theta=2000, nchunks=32, ntrain_map=10000,
-                      N_samples=500, degree_fluctuate=2000, seed=None,
+                      minimum_frequency = 20.0, maximum_frequency = 896.0,
+                      N_theta=6000, nchunks=32, ntrain_map=10000,
+                      N_samples=500, degree_fluctuate=8000, seed=None,
                       tukey_roll_off = 0.4):
     
-    N = int(duration * sampling_frequency)        
+    '''
+    # window in chunks
+    '''
     tukey_alpha = 2 * tukey_roll_off / duration
+    import_data = window_in_chunks(time_series.value, nchunks, tukey_alpha)
+    import_data = import_data.reshape(-1, 1)
+    
+    N = int(duration * sampling_frequency)        
     w = tukey(N, tukey_alpha)
     Ew = np.sqrt(np.mean(w**2))
     
@@ -181,9 +257,8 @@ def estimate_sgvb_psd(time_series, sampling_frequency, duration=4,
         maximum_frequency = sampling_frequency//2
         
     frange = [minimum_frequency, maximum_frequency]    
-    x = np.asarray(time_series).reshape(-1, 1)
     psd_est = PSDEstimator(
-        x=x,
+        x=import_data,
         N_theta=N_theta,
         nchunks=nchunks,
         ntrain_map=ntrain_map,
@@ -194,7 +269,7 @@ def estimate_sgvb_psd(time_series, sampling_frequency, duration=4,
         n_elbo_maximisation_steps=600,
         frange=frange
     )
-    psd_est.run(lr=0.02)
+    psd_est.run(lr=0.0078)
     freqs = psd_est.freq
     psd = psd_est.pointwise_ci[1]
     psd = psd*2 / Ew**2
@@ -205,7 +280,7 @@ def run_pe_study(
         det_names=("H1",),
         sampling_frequency_local=sampling_frequency,
         minimum_frequency_local=minimum_frequency,
-        maximum_frequency_local=sampling_frequency//2,
+        maximum_frequency_local=maximum_frequency,
         outdir="outdir_pe_study",
         sgvb_settings=None,
         seed=0,
@@ -239,30 +314,23 @@ def run_pe_study(
     bilby.core.utils.setup_logger(outdir=outdir, label=label)
     bilby.core.utils.random.seed(seed)
 
-    start_time = injection_params["geocent_time"] - 2
-    signal_end_time = start_time + duration
-    psd_start_time = start_time + duration
-    psd_end_time = psd_start_time + duration * 32
-    ifos = prepare_interferometers(det_names, sampling_frequency_local, duration=duration, start_time=start_time)
+    ifos, on_source_data, off_source_data = prepare_interferometers(det_names, 
+                                                                    sampling_frequency_local, 
+                                                                    duration=duration, 
+                                                                    seed=seed)
     ifos.inject_signal(waveform_generator=waveform_generator, parameters=injection_params)
-    
-    noise_ifos = prepare_interferometers(det_names, sampling_frequency_local,
-                                         duration=duration * 32, start_time=psd_start_time)
 
     psd_estimates = {}
 
     # Extract noise-only segment (all data after injection )
     for ifo in ifos:
-        on_source_data = np.asarray(ifo.strain_data.time_domain_strain)#.time_slice(start_time, signal_end_time)
-        psd_data = TimeSeries(np.asarray(noise_ifos[0].strain_data.time_domain_strain), 
-                              dt = 1.0/sampling_frequency)#.time_slice(signal_end_time, psd_end_time)
+        psd_data = TimeSeries(off_source_data, dt = 1.0/sampling_frequency)
 
         # Compute Welch PSD + SGVB PSD
         freqs_welch, welch_psd = estimate_welch_psd(psd_data, sampling_frequency_local)
         freqs_sgvb, sgvb_psd = estimate_sgvb_psd(psd_data, sampling_frequency_local)
 
-        # TODO: plot the two PSDs for comparison along with on-source data
-
+        # plot the two PSDs for comparison along with on-source data
         psd_estimates['welch'] = (freqs_welch, welch_psd)
         psd_estimates['sgvb'] = (freqs_sgvb, sgvb_psd)
         
@@ -275,19 +343,10 @@ def run_pe_study(
     print("SGVB PSD freq:", "length = ", len(freqs_sgvb), " min =", freqs_sgvb[0], " max =", freqs_sgvb[-1],
       " df =", freqs_sgvb[1]-freqs_sgvb[0])
     
-    freqs_true = ifos[0].power_spectral_density.frequency_array
-    true_psd = ifos[0].power_spectral_density.psd_array
-    mask = (freqs_true >= minimum_frequency_local) & (freqs_true <= maximum_frequency_local)
-    freqs_true = freqs_true[mask]
-    true_psd = true_psd[mask]
-    print("True PSD freq:", "length = ", len(freqs_true), " min =", freqs_true[0], " max =", freqs_true[-1],
-      " df =", freqs_true[1]-freqs_true[0])
-    
-    
     N = len(on_source_data)                   
     times = np.arange(N) / sampling_frequency_local         
-    f, on_source_f = get_fd_data(on_source_data, times = times, det='H1',
-                              roll_off = 0.4, fmin = minimum_frequency, fmax = None)
+    f, on_source_f = get_fd_data(on_source_data, times = times, det='H1', roll_off = 0.4,
+                               fmin = minimum_frequency, fmax = maximum_frequency)
     print("on_source_f:", "length = ", len(f), " min =", f[0], " max =", f[-1],
       " df =", f[1]-f[0])
     
@@ -295,7 +354,6 @@ def run_pe_study(
     plt.loglog(f, np.abs(on_source_f)**2, alpha=0.3, label="Data", color = "lightgray")
     plt.loglog(freqs_welch, welch_psd, alpha=0.7, label="Welch PSD", color = "green")
     plt.loglog(freqs_sgvb, sgvb_psd, alpha=1, label="SGVB PSD", color = "red")
-    plt.loglog(freqs_true, true_psd, alpha=0.5, label="Original PSD", color = "blue")
     plt.xlabel("Frequency [Hz]")
     plt.ylabel("PSD [strain²/Hz]")
     plt.legend()
@@ -306,7 +364,6 @@ def run_pe_study(
     
      
     # collect Original, Welch and SGVB PSDs
-    ifos_orig = copy.deepcopy(ifos)
     ifos_welch = copy.deepcopy(ifos)
     ifos_sgvb = copy.deepcopy(ifos)
     
@@ -317,21 +374,21 @@ def run_pe_study(
         freqs_sgvb, np.sqrt(sgvb_psd)
     )
     
-    for i in range(len(ifos_orig)):
+    for i in range(len(ifos)):
         ifos_welch[i].power_spectral_density = welch_psd_object
         ifos_sgvb[i].power_spectral_density = sgvb_psd_object
     
     ifos_for_analysis = dict(
         welch=ifos_welch,
-        sgvb=ifos_sgvb,
-        original=ifos_orig,
+        sgvb=ifos_sgvb
     )
 
 
     # Now we do the analysis twice, once with each PSD
     results = {}
     for name, analysis_ifos in ifos_for_analysis.items():
-        likelihood = bilby.gw.GravitationalWaveTransient(interferometers=analysis_ifos, waveform_generator=waveform_generator)
+        likelihood = bilby.gw.GravitationalWaveTransient(interferometers=analysis_ifos,
+                                                         waveform_generator=waveform_generator)
         print("Running analysis with", name, "PSD")
         print(likelihood.interferometers[0].power_spectral_density)
         run_label = f"{label}_{name}"
@@ -341,9 +398,7 @@ def run_pe_study(
             likelihood=likelihood,
             priors=analysis_prior,
             sampler="dynesty",
-            npoints=2000,
-            dlogz=0.01,
-            checkpoint_interval=100000,
+            npoints=1000,
             npool=npool,
             queue_size=npool,
             injection_parameters=injection_params,
@@ -356,13 +411,11 @@ def run_pe_study(
     # compute Bayes factor SGVB vs Welch
     logZ_welch = results["welch"].log_evidence
     logZ_sgvb = results["sgvb"].log_evidence
-    logZ_original = results["original"].log_evidence
     logBF = logZ_sgvb - logZ_welch
     BF = np.exp(logBF)
 
     print(f"logZ (welch) = {logZ_welch:.3f}")
     print(f"logZ (sgvb)  = {logZ_sgvb:.3f}")
-    print(f"logZ (original)  = {logZ_original:.3f}")
     print(f"logBF (sgvb - welch) = {logBF:.3f}, BF = {BF:.3e}")
 
     print("Welch posterior rows:", len(results["welch"].posterior))
@@ -399,12 +452,42 @@ def run_pe_study(
                                 filename=outpath2,
                                 dpi=200)
 
-    # --- Save evidences (compact numeric file) ---
-    # write: logZ_welch, logZ_sgvb, logZ_original, logBF, BF as one row
-    os.makedirs(outdir, exist_ok=True)
-    ev = np.array([logZ_welch, logZ_sgvb, logZ_original, logBF, BF], dtype=float)
-    header = "logZ_welch logZ_sgvb logZ_original logBF_sgvb_vs_welch BF_sgvb_vs_welch"
-    np.savetxt(os.path.join(outdir, f"{label}_evidences.txt"), ev.reshape(1, -1), header=header, fmt="%.6e")
+    # --- Save results (compact numeric file) ---
+    metrics_root = "outdir_pe_study"
+    os.makedirs(metrics_root, exist_ok=True)
+    metrics_path = os.path.join(metrics_root, "metrics.h5")
+    
+    with h5py.File(metrics_path, "a") as hf:
+        g_run = hf.create_group(label)
+        g_run.attrs["logZ_welch"] = logZ_welch
+        g_run.attrs["logZ_sgvb"]  = logZ_sgvb
+        g_run.attrs["logBF"]      = logBF
+    
+        for k, v in injection_params.items():
+            try:
+                g_run.attrs[f"inj_{k}"] = float(v)
+            except:
+                pass
+    
+        for method in ["welch", "sgvb"]:
+            g_method = g_run.create_group(method)
+            post_df = results[method].posterior
+            keys    = list(results[method].search_parameter_keys)
+    
+            for p in keys:
+                s   = post_df[p].to_numpy()
+                m   = np.mean(s)
+                q05, q95 = np.percentile(s, [5, 95])
+                w90 = q95 - q05
+                true_val = injection_params.get(p, np.nan)
+                bias = m - true_val
+                inside = 1 if (true_val >= q05 and true_val <= q95) else 0
+                cred_level = np.mean(s <= true_val)
+    
+                g_method.create_dataset(
+                    p,
+                    data=np.array([m, true_val, bias, w90, inside, cred_level], dtype=float)
+                )
 
     meta = dict(
         welch_freq=freqs_welch,
@@ -423,5 +506,6 @@ if __name__ == '__main__':
     seed = 0
     if len(args) > 0:
         seed = int(args[0])
+        
     run_pe_study(seed=seed)
 

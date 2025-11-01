@@ -23,12 +23,12 @@ label = "GW150914"
 CACHE_DIR = Path("data_cache")
 PSD_METHODS = ("welch", "sgvb")
 SGVB_SETTINGS = {
-    "N_theta": 2000,
+    "N_theta": 6000,
     "nchunks": 32,
     "ntrain_map": 10000,
     "N_samples": 500,
-    "degree_fluctuate": 2000,
-    "lr": 0.02,
+    "degree_fluctuate": 8000,
+    "lr": 0.0078,
     "max_hyperparm_eval": 1,
     "n_elbo_maximisation_steps": 600,
 }
@@ -117,6 +117,15 @@ def estimate_welch_psd(
     return np.asarray(spectrum.frequencies.value), np.asarray(spectrum.value)
 
 
+def window_in_chunks(x: np.ndarray, n_chunks: int = 32, alpha: float = 0.4) -> np.ndarray:
+    """Split x into n_chunks, apply Tukey window to each chunk, and re-concatenate."""
+    N = x.size
+    seglen = N // n_chunks
+    w = tukey(seglen, alpha=alpha)
+    X = x.reshape(n_chunks, seglen) * w
+    return X.reshape(N)
+
+
 def estimate_sgvb_psd(
     ts: TimeSeries,
     duration_seconds: float,
@@ -136,7 +145,12 @@ def estimate_sgvb_psd(
     window = tukey(n_samples_segment, tukey_alpha)
     ew = np.sqrt(np.mean(window**2))
 
-    data = np.asarray(ts.value).reshape(-1, 1)
+    '''
+    # window in chunks
+    '''
+    data = window_in_chunks(ts.value, config["nchunks"], tukey_alpha)
+    data = np.asarray(data).reshape(-1, 1)
+    
     estimator = PSDEstimator(
         x=data,
         N_theta=config["N_theta"],
@@ -275,7 +289,7 @@ def run_parameter_estimation(
             nlive=1000,
             check_point_delta_t=600,
             check_point_plot=True,
-            npool=1,
+            npool=32,
             conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
         )
         results[method] = result
@@ -291,7 +305,8 @@ def main() -> Dict[str, bilby.result.Result]:
     interferometers_by_method = build_interferometers(data_by_detector, psds)
 
     logger.info("Saving data plots to %s", outdir)
-    interferometers_by_method["welch"].plot_data(outdir=outdir, label=label)
+    interferometers_by_method["welch"].plot_data(outdir=outdir, label=f"{label}_welch")
+    interferometers_by_method["sgvb"].plot_data(outdir=outdir, label=f"{label}_sgvb")
 
     return run_parameter_estimation(interferometers_by_method)
 

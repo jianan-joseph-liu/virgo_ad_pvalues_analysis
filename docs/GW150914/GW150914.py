@@ -294,6 +294,19 @@ def run_parameter_estimation(
         )
         results[method] = result
         result.plot_corner()
+        
+    # compute Bayes factor SGVB vs Welch
+    logZ_welch = results["welch"].log_evidence
+    logZ_sgvb = results["sgvb"].log_evidence
+    logBF = logZ_sgvb - logZ_welch
+    BF = np.exp(logBF)
+
+    print(f"logZ (welch) = {logZ_welch:.3f}")
+    print(f"logZ (sgvb)  = {logZ_sgvb:.3f}")
+    print(f"logBF (sgvb - welch) = {logBF:.3f}, BF = {BF:.3e}")
+
+    print("Welch posterior rows:", len(results["welch"].posterior))
+    print("SGVB  posterior rows:", len(results["sgvb"].posterior))    
 
     return results
 

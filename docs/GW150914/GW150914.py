@@ -9,7 +9,8 @@ parameter estimation runs using two PSD estimation strategies:
 """
 from pathlib import Path
 from typing import Dict, Tuple
-
+import multiprocessing as mp
+import os
 import bilby
 import numpy as np
 from gwpy.timeseries import TimeSeries
@@ -280,6 +281,8 @@ def run_parameter_estimation(
             distance_marginalization=True,
         )
 
+        npool = min(mp.cpu_count(), int(os.environ.get("SLURM_CPUS_PER_TASK", "1")))
+        print("npool = ", npool)
         result = bilby.run_sampler(
             likelihood,
             priors,
@@ -289,7 +292,7 @@ def run_parameter_estimation(
             nlive=1000,
             check_point_delta_t=600,
             check_point_plot=True,
-            npool=32,
+            npool=npool,
             conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
         )
         results[method] = result

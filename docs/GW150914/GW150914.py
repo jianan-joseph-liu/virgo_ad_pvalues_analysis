@@ -37,7 +37,7 @@ SGVB_SETTINGS = {
 # Analysis configuration
 trigger_time = 1126259462.4
 detectors = ["H1", "L1"]
-maximum_frequency = 512
+maximum_frequency = 1024
 minimum_frequency = 20
 roll_off = 0.4  # Roll-off duration of Tukey window in seconds
 duration = 4  # Analysis segment duration
@@ -114,7 +114,7 @@ def estimate_welch_psd(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Estimate a PSD via the standard Welch median estimator."""
     psd_alpha = 2 * roll_off_seconds / duration_seconds
-    spectrum = ts.psd(fftlength=duration_seconds, overlap=0, window=("tukey", psd_alpha), method="median")
+    spectrum = ts.psd(fftlength=duration_seconds, overlap=2, window=("tukey", psd_alpha), method="median")
     return np.asarray(spectrum.frequencies.value), np.asarray(spectrum.value)
 
 
@@ -289,8 +289,11 @@ def run_parameter_estimation(
             sampler="dynesty",
             outdir=outdir,
             label=method_label,
-            nlive=1000,
-            check_point_delta_t=600,
+            nlive=2000,
+            sample="rwalk",
+            walks=100,
+            nact=10,
+            check_point_delta_t=10000,
             check_point_plot=True,
             npool=npool,
             conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,

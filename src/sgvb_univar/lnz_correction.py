@@ -23,7 +23,7 @@ def psd_ln_term(interferometers, duration):
     correction = 0.0
     for ifo in interferometers:
         psd = ifo.power_spectral_density_array
-        print("psd has shape:", psd.shape)
+        print("psd has shape:", psd.shape, "np.sum(np.log(psd)) is", np.sum(np.log(psd)))
         correction -= (2.0 / T) * np.sum(np.log(psd))
     return correction
 
@@ -45,8 +45,7 @@ def apply_psd_correction(result, interferometers, duration=None):
         duration = waveform_generator.duration
 
     correction = psd_ln_term(interferometers, duration)
-    print("duration is:", duration)
-    print("correction is:", correction)
+    
     # Copy to avoid mutating the original object
     corrected = dict(
         log_evidence=result.log_evidence + correction,

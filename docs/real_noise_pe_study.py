@@ -4,6 +4,7 @@ Runs a parameter estimation study comparing SGVB and Welch PSD estimates.
 import bilby
 import corner
 from sgvb_univar.psd_estimator import PSDEstimator
+from sgvb_univar.lnz_correction import apply_psd_corrections
 import numpy as np
 from gwpy.timeseries import TimeSeries
 from scipy.signal.windows import tukey
@@ -416,6 +417,7 @@ def run_pe_study(
         welch=ifos_welch,
         sgvb=ifos_sgvb
     )
+    psd_methods = list(ifos_for_analysis.keys())
 
 
     # Now we do the analysis twice, once with each PSD
@@ -462,6 +464,14 @@ def run_pe_study(
     print(f"logZ (welch) = {logZ_welch:.3f}")
     print(f"logZ (sgvb)  = {logZ_sgvb:.3f}")
     print(f"logBF (sgvb - welch) = {logBF:.3f}, BF = {BF:.3e}")
+
+    apply_psd_corrections(
+        results,
+        ifos_for_analysis,
+        psd_methods,
+        outdir,
+        duration=duration,
+    )
 
     print("Welch posterior rows:", len(results["welch"].posterior))
     print("SGVB  posterior rows:", len(results["sgvb"].posterior))

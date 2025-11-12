@@ -43,8 +43,9 @@ def apply_psd_correction(result, interferometers, duration=None):
                 "Duration must be provided when the result does not carry a waveform generator."
             )
         duration = waveform_generator.duration
-        print("duration is:", duration)
+
     correction = psd_ln_term(interferometers, duration)
+    print("duration is:", duration)
     print("correction is:", correction)
     # Copy to avoid mutating the original object
     corrected = dict(

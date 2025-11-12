@@ -282,23 +282,28 @@ def run_parameter_estimation(
             distance_marginalization=True,
         )
 
-        npool = min(mp.cpu_count(), int(os.environ.get("SLURM_CPUS_PER_TASK", "1")))
-        print("npool = ", npool)
-        result = bilby.run_sampler(
-            likelihood,
-            priors,
-            sampler="dynesty",
-            outdir=outdir,
-            label=method_label,
-            nlive=2000,
-            sample="rwalk",
-            walks=100,
-            nact=10,
-            check_point_delta_t=10000,
-            check_point_plot=True,
-            npool=npool,
-            conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
-        )
+        result_json = Path(outdir) / f"{method_label}_result.json"
+        if result_json.exists():
+            logger.info("Found existing result at %s; loading instead of rerunning sampler.", result_json)
+            result = bilby.result.read_in_result(outdir=outdir, label=method_label)
+        else:
+            npool = min(mp.cpu_count(), int(os.environ.get("SLURM_CPUS_PER_TASK", "1")))
+            print("npool = ", npool)
+            result = bilby.run_sampler(
+                likelihood,
+                priors,
+                sampler="dynesty",
+                outdir=outdir,
+                label=method_label,
+                nlive=2000,
+                sample="rwalk",
+                walks=100,
+                nact=10,
+                check_point_delta_t=10000,
+                check_point_plot=True,
+                npool=npool,
+                conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
+            )
         results[method] = result
         result.plot_corner()
         

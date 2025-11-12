@@ -34,16 +34,17 @@ waveform_generator = bilby.gw.WaveformGenerator(
     ),
 )
 
-# DONT ANALYSE THESE FOR NOW -- TO SPEED UP
-fixed_analysis_params = [
-    "geocent_time"
-]
-
 
 '''
 # get the files that corresponds to the GPS time
 '''
 data_dir = "/datasets/LIGO/public/gwosc.osgstorage.org/gwdata/O3b/strain.4k/hdf.v1/H1/"
+CACHE_ROOT = os.path.join("outdir_pe_study", "cache")
+
+
+def _ensure_cache_dir():
+    os.makedirs(CACHE_ROOT, exist_ok=True)
+    return CACHE_ROOT
 
 def _get_data_files_and_gps_times(data_dir: str):
     
@@ -102,8 +103,19 @@ def prepare_interferometers(det_names, sampling_frequency, duration, seed):
     Returns the InterferometerList.
     """
     ifos = bilby.gw.detector.InterferometerList(det_names)
-    
-    segment, t0, t1 = get_noise_segment_from_seed(segment_file, data_dir, seed)
+
+    cache_dir = _ensure_cache_dir()
+    strain_cache_path = os.path.join(cache_dir, f"seed_{seed}_strain.npz")
+    if os.path.exists(strain_cache_path):
+        cached = np.load(strain_cache_path)
+        segment = cached["segment"]
+        t0 = int(cached["t0"])
+        t1 = int(cached["t1"])
+        print(f"Loaded cached strain data from {strain_cache_path}")
+    else:
+        segment, t0, t1 = get_noise_segment_from_seed(segment_file, data_dir, seed)
+        np.savez_compressed(strain_cache_path, segment=segment, t0=t0, t1=t1)
+        print(f"Cached strain data to {strain_cache_path}")
     start_time = t1 - duration
     print('Start GPS time:', start_time, 'End GPS time:', t1)
     boundary = int(32*sampling_frequency*duration)
@@ -294,12 +306,13 @@ def run_pe_study(
 
     inj_prior = bilby.gw.prior.BBHPriorDict()
     injection_params = inj_prior.sample()
-    injection_params['geocent_time'] = 2.0
+    trigger_time = 2.0
+    injection_params['geocent_time'] = trigger_time
     # delta functions for all params not in params_to_sample
     analysis_prior = bilby.gw.prior.BBHPriorDict()
-    for key in fixed_analysis_params:
-        # Assign a delta-prior by setting the prior to the injected value
-        analysis_prior[key] = injection_params[key]
+    analysis_prior["geocent_time"] = bilby.core.prior.Uniform(
+        trigger_time - 0.1, trigger_time + 0.1, name="geocent_time"
+    )
     analysis_prior.validate_prior(duration, minimum_frequency_local)
 
     # print out the injection parameters, and analysis priors
@@ -321,20 +334,41 @@ def run_pe_study(
     ifos.inject_signal(waveform_generator=waveform_generator, parameters=injection_params)
 
     psd_estimates = {}
+    psd_cache_path = os.path.join(_ensure_cache_dir(), f"seed_{seed}_psd.npz")
 
-    # Extract noise-only segment (all data after injection )
-    for ifo in ifos:
-        psd_data = TimeSeries(off_source_data, dt = 1.0/sampling_frequency)
+    if os.path.exists(psd_cache_path):
+        cached_psd = np.load(psd_cache_path)
+        psd_estimates['welch'] = (
+            cached_psd['freqs_welch'],
+            cached_psd['welch_psd']
+        )
+        psd_estimates['sgvb'] = (
+            cached_psd['freqs_sgvb'],
+            cached_psd['sgvb_psd']
+        )
+        print(f"Loaded cached PSDs from {psd_cache_path}")
+    else:
+        # Extract noise-only segment (all data after injection )
+        psd_data = TimeSeries(off_source_data, dt=1.0/sampling_frequency)
 
         # Compute Welch PSD + SGVB PSD
         freqs_welch, welch_psd = estimate_welch_psd(psd_data, sampling_frequency_local)
+        freqs_welch = np.asarray(freqs_welch)
+        welch_psd = np.asarray(welch_psd)
         freqs_sgvb, sgvb_psd = estimate_sgvb_psd(psd_data, sampling_frequency_local)
 
-        # plot the two PSDs for comparison along with on-source data
         psd_estimates['welch'] = (freqs_welch, welch_psd)
         psd_estimates['sgvb'] = (freqs_sgvb, sgvb_psd)
-        
-        
+
+        np.savez_compressed(
+            psd_cache_path,
+            freqs_welch=freqs_welch,
+            welch_psd=welch_psd,
+            freqs_sgvb=freqs_sgvb,
+            sgvb_psd=sgvb_psd
+        )
+        print(f"Cached PSDs to {psd_cache_path}")
+
     # plot the two PSDs for comparison along with on-source data
     freqs_welch, welch_psd = psd_estimates['welch']
     print("Welch PSD freq:", "length = ", len(freqs_welch), " min =", freqs_welch[0], " max =", freqs_welch[-1],
@@ -387,25 +421,36 @@ def run_pe_study(
     # Now we do the analysis twice, once with each PSD
     results = {}
     for name, analysis_ifos in ifos_for_analysis.items():
-        likelihood = bilby.gw.GravitationalWaveTransient(interferometers=analysis_ifos,
-                                                         waveform_generator=waveform_generator)
+        likelihood = bilby.gw.GravitationalWaveTransient(
+            interferometers=analysis_ifos,
+            waveform_generator=waveform_generator,
+            time_marginalization=True,
+            phase_marginalization=False,
+            distance_marginalization=True,
+            )
         print("Running analysis with", name, "PSD")
         print(likelihood.interferometers[0].power_spectral_density)
         run_label = f"{label}_{name}"
-        npool = min(mp.cpu_count(), int(os.environ.get("SLURM_CPUS_PER_TASK", "1")))
-        print("npool = ", npool)
-        res = bilby.run_sampler(
-            likelihood=likelihood,
-            priors=analysis_prior,
-            sampler="dynesty",
-            npoints=1000,
-            npool=npool,
-            queue_size=npool,
-            injection_parameters=injection_params,
-            outdir=outdir,
-            label=run_label,
-            resume=False,
-        )
+        result_json = os.path.join(outdir, f"{run_label}_result.json")
+        if os.path.exists(result_json):
+            print(f"Found existing result at {result_json}; loading instead of rerunning sampler.")
+            res = bilby.result.read_in_result(outdir=outdir, label=run_label)
+        else:
+            npool = min(mp.cpu_count(), int(os.environ.get("SLURM_CPUS_PER_TASK", "1")))
+            print("npool = ", npool)
+            res = bilby.run_sampler(
+                likelihood=likelihood,
+                priors=analysis_prior,
+                sampler="dynesty",
+                npoints=1000,
+                npool=npool,
+                queue_size=npool,
+                injection_parameters=injection_params,
+                outdir=outdir,
+                label=run_label,
+                resume=True,
+                conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
+            )
         results[name] = res
 
     # compute Bayes factor SGVB vs Welch
@@ -508,4 +553,3 @@ if __name__ == '__main__':
         seed = int(args[0])
         
     run_pe_study(seed=seed)
-

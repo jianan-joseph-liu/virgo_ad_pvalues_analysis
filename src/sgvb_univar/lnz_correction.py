@@ -46,7 +46,7 @@ def apply_psd_correction(result, interferometers):
 
 
 
-def apply_psd_corrections(results, interferometers, methods):
+def apply_psd_corrections(results, interferometers, methods, outdir):
     logz_corrected = {}
     print("Applying PSD normalization corrections...")
     for method in methods:
@@ -61,5 +61,13 @@ def apply_psd_corrections(results, interferometers, methods):
 
     logBF_corrected = logz_corrected["sgvb"] - logz_corrected["welch"]
     print(f"Corrected logBF (sgvb - welch) = {logBF_corrected:.3f}, BF = {np.exp(logBF_corrected):.3e}")    
+
+    # save corrected logZ values as a file
+    with open(os.path.join(outdir, "corrected_logZ.txt"), "w") as f:
+        for method in PSD_METHODS:
+            f.write(f"{method} corrected logZ: {logz_corrected[method]:.6f}\n")
+        logBF_corrected = logz_corrected["sgvb"] - logz_corrected["welch"]
+        f.write(f"Corrected logBF (sgvb - welch) = {logBF_corrected:.6f}, BF = {np.exp(logBF_corrected):.6e}\n")
+
 
     return results

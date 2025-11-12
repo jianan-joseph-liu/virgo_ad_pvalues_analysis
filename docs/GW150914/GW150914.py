@@ -60,6 +60,11 @@ def _cache_path(detector: str, start: float, end: float, kind: str) -> Path:
     return CACHE_DIR / f"{detector}_{_time_tag(start)}_{_time_tag(end)}_{kind}.npz"
 
 
+def _psd_cache_path(detector: str, method: str) -> Path:
+    tag = f"{_time_tag(psd_start_time)}_{_time_tag(psd_end_time)}"
+    return CACHE_DIR / f"{detector}_{tag}_{method}_psd.npz"
+
+
 def _save_timeseries(ts: TimeSeries, path: Path) -> None:
     """Persist a TimeSeries as compressed numpy arrays."""
     np.savez_compressed(
@@ -198,6 +203,21 @@ def compute_psds(
     """Compute the PSD for each detector using all configured methods."""
     psds: Dict[str, Dict[str, Tuple[np.ndarray, np.ndarray]]] = {}
     for det, info in data_by_detector.items():
+        cache_hits = {}
+        missing_methods = []
+        for method in PSD_METHODS:
+            cache_path = _psd_cache_path(det, method)
+            if cache_path.exists():
+                with np.load(cache_path) as npz:
+                    cache_hits[method] = (np.asarray(npz["freq"]), np.asarray(npz["psd"]))
+            else:
+                missing_methods.append(method)
+
+        if not missing_methods:
+            logger.info("Loaded cached PSDs for %s from %s", det, CACHE_DIR)
+            psds[det] = cache_hits
+            continue
+
         psd_ts = info["psd_ts"]
         sample_rate = info["sample_rate"]
 
@@ -218,6 +238,12 @@ def compute_psds(
             "welch": (welch_freq, welch_psd),
             "sgvb": (sgvb_freq, sgvb_psd),
         }
+
+        for method, (freq, psd_vals) in psds[det].items():
+            cache_path = _psd_cache_path(det, method)
+            CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            np.savez_compressed(cache_path, freq=freq, psd=psd_vals)
+            logger.info("Cached %s PSD for %s to %s", method.upper(), det, cache_path)
     return psds
 
 
@@ -321,7 +347,13 @@ def run_parameter_estimation(
     print("SGVB  posterior rows:", len(results["sgvb"].posterior))    
 
     logz_corrected = {}
-    logz_corrected = apply_psd_corrections(results, interferometers_by_method, PSD_METHODS, outdir)    
+    logz_corrected = apply_psd_corrections(
+        results,
+        interferometers_by_method,
+        PSD_METHODS,
+        outdir,
+        duration=duration,
+    )
     
     return results
 

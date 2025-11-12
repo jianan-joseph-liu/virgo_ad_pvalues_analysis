@@ -17,9 +17,9 @@ import bilby
 import os
 
 
-def psd_ln_term(interferometers, waveform_generator):
+def psd_ln_term(interferometers, duration):
     """Compute the PSD normalization term (−2/T * Σ log S_n(f))."""
-    T = waveform_generator.duration
+    T = duration
     correction = 0.0
     for ifo in interferometers:
         psd = ifo.power_spectral_density_array
@@ -27,7 +27,7 @@ def psd_ln_term(interferometers, waveform_generator):
     return correction
 
 
-def apply_psd_correction(result, interferometers):
+def apply_psd_correction(result, interferometers, duration=None):
     """
     Compute and apply the PSD normalization correction to:
       - log_evidence
@@ -35,7 +35,15 @@ def apply_psd_correction(result, interferometers):
 
     Returns a new corrected result dictionary for safety.
     """
-    correction = psd_ln_term(interferometers, result.waveform_generator)
+    if duration is None:
+        waveform_generator = getattr(result, "waveform_generator", None)
+        if waveform_generator is None:
+            raise ValueError(
+                "Duration must be provided when the result does not carry a waveform generator."
+            )
+        duration = waveform_generator.duration
+
+    correction = psd_ln_term(interferometers, duration)
 
     # Copy to avoid mutating the original object
     corrected = dict(
@@ -47,11 +55,11 @@ def apply_psd_correction(result, interferometers):
 
 
 
-def apply_psd_corrections(results, interferometers, methods, outdir):
+def apply_psd_corrections(results, interferometers, methods, outdir, duration=None):
     logz_corrected = {}
     print("Applying PSD normalization corrections...")
     for method in methods:
-        corrected = apply_psd_correction(results[method], interferometers[method])
+        corrected = apply_psd_correction(results[method], interferometers[method], duration=duration)
         print(
             f"{method.upper()} PSD normalization correction: "
             f"{corrected['psd_norm_correction']:.3f}"

@@ -16,6 +16,7 @@ import numpy as np
 from gwpy.timeseries import TimeSeries
 from scipy.signal.windows import tukey
 from sgvb_univar.psd_estimator import PSDEstimator
+from sgvb_univar.lnz_correction import apply_psd_corrections
 
 logger = bilby.core.utils.logger
 outdir = "outdir"
@@ -314,6 +315,9 @@ def run_parameter_estimation(
     print("Welch posterior rows:", len(results["welch"].posterior))
     print("SGVB  posterior rows:", len(results["sgvb"].posterior))    
 
+    logz_corrected = {}
+    logz_corrected = apply_psd_corrections(results, interferometers_by_method, PSD_METHODS, outdir)    
+    
     return results
 
 

@@ -1,0 +1,65 @@
+"""
+Post-process Bilby result to add PSD normalization correction to both
+the signal and noise evidences.
+
+We assume:
+  - You already have Bilby `result` loaded (from a completed run).
+  - You already have the interferometers (with PSDs) constructed.
+  - The waveform_generator is accessible from the result.
+
+The correction term is:
+    Δ = - (2 / T) * sum_i sum_f log(Sn_i(f))
+which is constant for a given PSD model and affects the evidence normalization.
+"""
+
+import numpy as np
+import bilby
+
+
+def psd_ln_term(interferometers, waveform_generator):
+    """Compute the PSD normalization term (−2/T * Σ log S_n(f))."""
+    T = waveform_generator.duration
+    correction = 0.0
+    for ifo in interferometers:
+        psd = ifo.power_spectral_density_array
+        correction -= (2.0 / T) * np.sum(np.log(psd))
+    return correction
+
+
+def apply_psd_correction(result, interferometers):
+    """
+    Compute and apply the PSD normalization correction to:
+      - log_evidence
+      - log_noise_evidence
+
+    Returns a new corrected result dictionary for safety.
+    """
+    correction = psd_ln_term(interferometers, result.waveform_generator)
+
+    # Copy to avoid mutating the original object
+    corrected = dict(
+        log_evidence=result.log_evidence + correction,
+        log_noise_evidence=result.log_noise_evidence + correction,
+        psd_norm_correction=correction,
+    )
+    return corrected
+
+
+
+def apply_psd_corrections(results, interferometers, methods):
+    logz_corrected = {}
+    print("Applying PSD normalization corrections...")
+    for method in methods:
+        corrected = apply_psd_correction(results[method], interferometers[method])
+        print(
+            f"{method.upper()} PSD normalization correction: "
+            f"{corrected['psd_norm_correction']:.3f}"
+        )
+        logZ_corr = corrected["log_evidence"]
+        print(f"{method.upper()} corrected logZ: {logZ_corr:.3f}")
+        logz_corrected[method] = logZ_corr
+
+    logBF_corrected = logz_corrected["sgvb"] - logz_corrected["welch"]
+    print(f"Corrected logBF (sgvb - welch) = {logBF_corrected:.3f}, BF = {np.exp(logBF_corrected):.3e}")    
+
+    return results

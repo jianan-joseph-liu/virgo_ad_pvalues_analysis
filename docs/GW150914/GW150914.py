@@ -295,7 +295,8 @@ def run_parameter_estimation(
     )
 
     for method, ifo_list in interferometers_by_method.items():
-        print((interferometers_by_method[method].power_spectral_density_array)[:10])
+        for ifo in interferometers_by_method[method]:
+            print((ifo.power_spectral_density_array)[:10])
         priors = base_priors.copy()
         method_label = f"{label}_{method}"
         logger.info("Starting parameter estimation using the %s PSD", method.upper())

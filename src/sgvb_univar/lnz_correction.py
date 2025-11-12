@@ -14,6 +14,7 @@ which is constant for a given PSD model and affects the evidence normalization.
 
 import numpy as np
 import bilby
+import os
 
 
 def psd_ln_term(interferometers, waveform_generator):
@@ -64,7 +65,7 @@ def apply_psd_corrections(results, interferometers, methods, outdir):
 
     # save corrected logZ values as a file
     with open(os.path.join(outdir, "corrected_logZ.txt"), "w") as f:
-        for method in PSD_METHODS:
+        for method in methods:
             f.write(f"{method} corrected logZ: {logz_corrected[method]:.6f}\n")
         logBF_corrected = logz_corrected["sgvb"] - logz_corrected["welch"]
         f.write(f"Corrected logBF (sgvb - welch) = {logBF_corrected:.6f}, BF = {np.exp(logBF_corrected):.6e}\n")

@@ -540,22 +540,21 @@ def run_pe_study(
     # Now we do the analysis twice, once with each PSD
     results = {}
     for name, analysis_ifos in ifos_for_analysis.items():
-        likelihood = bilby.gw.GravitationalWaveTransient(
-            interferometers=analysis_ifos,
-            waveform_generator=waveform_generator,
-            time_marginalization=True,
-            phase_marginalization=False,
-            distance_marginalization=True,
-            priors=analysis_prior,
-            )
         print("Running analysis with", name, "PSD")
-        print(likelihood.interferometers[0].power_spectral_density)
         run_label = f"{label}_{name}"
         result_json = os.path.join(outdir, f"{run_label}_result.json")
         if os.path.exists(result_json):
             print(f"Found existing result at {result_json}; loading instead of rerunning sampler.")
             res = bilby.result.read_in_result(outdir=outdir, label=run_label)
         else:
+            likelihood = bilby.gw.GravitationalWaveTransient(
+                interferometers=analysis_ifos,
+                waveform_generator=waveform_generator,
+                time_marginalization=True,
+                phase_marginalization=False,
+                distance_marginalization=True,
+                priors=analysis_prior,
+            )
             npool = min(mp.cpu_count(), int(os.environ.get("SLURM_CPUS_PER_TASK", "1")))
             print("npool = ", npool)
             res = bilby.run_sampler(

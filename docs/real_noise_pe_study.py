@@ -122,6 +122,7 @@ def evaluate_stationarity(
     power_time = power_time / (np.median(power_time))
     stationarity_sigma = float(np.std(power_time))
     
+    '''
     fig, ax = plt.subplots(2, 1, figsize=(12, 8))
     qspec.plot(norm='log', axes=ax[0])
     ax[0].set_title("Q-transform Spectrogram")
@@ -135,6 +136,7 @@ def evaluate_stationarity(
     plot_path = os.path.join(outdir, f"{label}_stationarity.png")
     fig.savefig(plot_path, dpi=200)
     plt.close(fig)
+    '''
 
     return stationarity_sigma
 

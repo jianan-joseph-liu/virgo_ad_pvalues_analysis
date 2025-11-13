@@ -98,106 +98,45 @@ def get_noise_segment_from_seed(segment_file, data_dir, seed):
     return y, t0, t1
 
 
-def _chunk_time_series(data: np.ndarray, chunk_size: int) -> np.ndarray:
-    """Reshape `data` into equal-length chunks, dropping any remainder."""
-    n_chunks = data.size // chunk_size
-    if n_chunks == 0:
-        raise ValueError("Need at least one full chunk to compute stationarity diagnostics.")
-    trimmed = data[: n_chunks * chunk_size]
-    return trimmed.reshape(n_chunks, chunk_size)
-
-
 def evaluate_stationarity(
-    data: np.ndarray,
-    sampling_frequency_hz: float,
+    data,
+    fs,
     label: str,
     outdir: str,
-    chunk_duration: float,
-) -> dict:
-    """
-    Compute simple stationarity diagnostics by comparing chunk-level statistics.
-
-    Returns a dictionary with summary metrics and writes plots/text reports to `outdir`.
-    """
-    os.makedirs(outdir, exist_ok=True)
-    arr = np.asarray(data, dtype=float).ravel()
-    chunk_size = max(int(chunk_duration * sampling_frequency_hz), 1)
-
-    try:
-        chunks = _chunk_time_series(arr, chunk_size)
-    except ValueError as exc:
-        print(f"[stationarity:{label}] {exc}")
-        return {}
-
-    chunk_means = np.mean(chunks, axis=1)
-    chunk_stds = np.std(chunks, axis=1, ddof=0)
-    chunk_rms = np.sqrt(np.mean(chunks ** 2, axis=1))
-
-    median_mean = float(np.median(chunk_means))
-    median_std = float(np.median(chunk_stds))
-    median_rms = float(np.median(chunk_rms))
-
-    mean_zscores = np.abs(chunk_means - median_mean) / (np.std(chunk_means) + 1e-12)
-    std_ratios = chunk_stds / (median_std + 1e-12)
-    rms_ratios = chunk_rms / (median_rms + 1e-12)
-
-    stats = {
-        "n_chunks": int(chunks.shape[0]),
-        "mean_range": float(chunk_means.max() - chunk_means.min()),
-        "std_range": float(chunk_stds.max() - chunk_stds.min()),
-        "rms_range": float(chunk_rms.max() - chunk_rms.min()),
-        "max_mean_z": float(mean_zscores.max()),
-        "max_std_ratio": float(std_ratios.max()),
-        "max_rms_ratio": float(rms_ratios.max()),
-    }
-
-    flag_messages = []
-    if stats["max_mean_z"] > 3.0:
-        flag_messages.append("chunk means deviate >3σ from median")
-    if stats["max_std_ratio"] > 1.3:
-        flag_messages.append("chunk std exceeds 30% of median")
-    if stats["max_rms_ratio"] > 1.3:
-        flag_messages.append("chunk RMS exceeds 30% of median")
-
-    flag_summary = ", ".join(flag_messages) if flag_messages else "no large excursions detected"
-    print(f"[stationarity:{label}] chunks={stats['n_chunks']} -> {flag_summary}")
-
-    fig, axes = plt.subplots(3, 1, figsize=(8, 6), sharex=True)
-    chunk_times = np.arange(stats["n_chunks"]) * chunk_duration
-    axes[0].plot(chunk_times, chunk_means, marker="o", lw=1)
-    axes[0].axhline(median_mean, color="k", ls="--", lw=0.8)
-    axes[0].set_ylabel("Mean")
-
-    axes[1].plot(chunk_times, chunk_stds, marker="o", lw=1, color="tab:orange")
-    axes[1].axhline(median_std, color="k", ls="--", lw=0.8)
-    axes[1].set_ylabel("Std")
-
-    axes[2].plot(chunk_times, chunk_rms, marker="o", lw=1, color="tab:green")
-    axes[2].axhline(median_rms, color="k", ls="--", lw=0.8)
-    axes[2].set_ylabel("RMS")
-    axes[2].set_xlabel(f"Chunk midpoint [s] (chunk = {chunk_duration:.1f}s)")
-
-    fig.suptitle(f"Stationarity diagnostics ({label})")
-    fig.tight_layout()
+    frange=(20.0, 1024.0),
+    qrange=(4.0, 32.0),
+    pad=1.0,
+    whiten: bool = True,
+):
+    ts = TimeSeries(np.asarray(data), dt=1.0/fs)
+    ts = ts.highpass(frange[0])
+    ts = ts.lowpass(frange[1])
+    ts = ts.whiten()
+    
+    duration = ts.duration.value
+    start = float(max(0.0, pad))
+    stop  = float(max(start, duration - pad))
+    qspec = ts.q_transform(outseg=(start, stop), qrange=qrange, frange=frange)
+    
+    power_time = np.sum(np.abs(qspec.value)**2, axis=0)
+    power_time = power_time / (np.median(power_time))
+    stationarity_sigma = float(np.std(power_time))
+    
+    fig, ax = plt.subplots(2, 1, figsize=(12, 8))
+    qspec.plot(ftype='log', ax=ax[0])
+    ax[0].set_title("Q-transform Spectrogram")
+    ax[1].plot(qspec.times.value, power_time, lw=0.8)
+    ax[1].axhline(1.0, color='gray', ls='--', lw=0.5)
+    ax[1].set_xlabel("Time [s]")
+    ax[1].set_ylabel("Normalized power")
+    ax[1].set_title(f"Stationarity (σ={stationarity_sigma:.3f})")
+    plt.tight_layout()
 
     plot_path = os.path.join(outdir, f"{label}_stationarity.png")
-    fig.savefig(plot_path, dpi=150)
+    fig.savefig(plot_path, dpi=200)
     plt.close(fig)
 
-    report_path = os.path.join(outdir, f"{label}_stationarity.txt")
-    with open(report_path, "w") as f:
-        f.write(f"Stationarity diagnostics for {label}\n")
-        for key, value in stats.items():
-            f.write(f"{key}: {value}\n")
-        if flag_messages:
-            f.write("Flags: " + "; ".join(flag_messages) + "\n")
-        else:
-            f.write("Flags: none\n")
-
-    stats["plot_path"] = plot_path
-    stats["report_path"] = report_path
-    stats["flags"] = flag_messages
-    return stats
+    return stationarity_sigma
 
 
 def prepare_interferometers(det_names, sampling_frequency, duration, seed):
@@ -435,20 +374,23 @@ def run_pe_study(
     for k, v in analysis_prior.items():
         print(f"  {k}: {v}")
 
-    evaluate_stationarity(
+    off_source_sigma = evaluate_stationarity(
         data=off_source_data,
-        sampling_frequency_hz=sampling_frequency_local,
+        fs=sampling_frequency_local,
         label=f"{label}_psd_segment",
         outdir=outdir,
-        chunk_duration=duration,
     )
-    evaluate_stationarity(
+    print(f"[stationarity] Off-source segment σ = {off_source_sigma:.3f}")
+    
+    on_source_sigma = evaluate_stationarity(
         data=on_source_data,
         sampling_frequency_hz=sampling_frequency_local,
         label=f"{label}_analysis_segment",
-        outdir=outdir,
-        chunk_duration=duration,
+        outdir=outdir
     )
+    print(f"[stationarity] On-source segment σ = {on_source_sigma:.3f}")
+    
+    
     ifos.inject_signal(waveform_generator=waveform_generator, parameters=injection_params)
 
     psd_estimates = {}

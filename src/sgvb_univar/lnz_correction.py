@@ -16,17 +16,32 @@ import numpy as np
 import bilby
 import os
 
+logger = bilby.core.utils.logger
+
 
 def psd_ln_term(interferometers, duration):
-    """Compute the PSD normalization term (−2/T * Σ log S_n(f))."""
+    """Compute the PSD normalization term (?^'2/T * I? log S_n(f))."""
     T = duration
     correction = 0.0
     for ifo in interferometers:
-        psd = ifo.power_spectral_density_array
-        psd = np.isfinite(psd)
-        print("psd has shape:", psd.shape, "np.sum(np.log(psd)) is", np.sum(np.log(psd)))
-        print("psd", psd[:10])
-        correction -= (2.0 / T) * np.sum(np.log(psd))
+        psd = np.asarray(ifo.power_spectral_density_array, dtype=float)
+        finite_mask = np.isfinite(psd)
+        positive_mask = psd > 0.0
+        valid_mask = finite_mask & positive_mask
+        if not np.all(valid_mask):
+            n_invalid = np.count_nonzero(~valid_mask)
+            logger.warning(
+                "PSD for %s contains %d/%d non-positive or non-finite bins; ignoring them for lnZ correction.",
+                ifo.name,
+                n_invalid,
+                psd.size,
+            )
+        if not np.any(valid_mask):
+            raise ValueError(
+                f"PSD for {ifo.name} contains no positive finite samples; cannot compute lnZ correction."
+            )
+        safe_psd = psd[valid_mask]
+        correction -= (2.0 / T) * np.sum(np.log(safe_psd))
     return correction
 
 
@@ -74,12 +89,13 @@ def apply_psd_corrections(results, interferometers, methods, outdir, duration=No
     logBF_corrected = logz_corrected["sgvb"] - logz_corrected["welch"]
     print(f"Corrected logBF (sgvb - welch) = {logBF_corrected:.3f}, BF = {np.exp(logBF_corrected):.3e}")    
 
-    # save corrected logZ values as a file
+    # Save corrected logZ values as a file
     with open(os.path.join(outdir, "corrected_logZ.txt"), "w") as f:
         for method in methods:
             f.write(f"{method} corrected logZ: {logz_corrected[method]:.6f}\n")
         logBF_corrected = logz_corrected["sgvb"] - logz_corrected["welch"]
-        f.write(f"Corrected logBF (sgvb - welch) = {logBF_corrected:.6f}, BF = {np.exp(logBF_corrected):.6e}\n")
-
+        f.write(
+            f"Corrected logBF (sgvb - welch) = {logBF_corrected:.6f}, BF = {np.exp(logBF_corrected):.6e}\n"
+        )
 
     return results

@@ -386,7 +386,7 @@ def run_pe_study(
     
     on_source_sigma = evaluate_stationarity(
         data=on_source_data,
-        sampling_frequency_hz=sampling_frequency_local,
+        fs=sampling_frequency_local,
         label=f"{label}_analysis_segment",
         outdir=outdir
     )

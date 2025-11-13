@@ -201,10 +201,7 @@ def evaluate_stationarity(
 
 
 def prepare_interferometers(det_names, sampling_frequency, duration, seed):
-    """Create an InterferometerList and set strain data from PSDs.
-
-    Returns the InterferometerList.
-    """
+    """Create interferometers populated with on-source strain data."""
     ifos = bilby.gw.detector.InterferometerList(det_names)
 
     cache_dir = _ensure_cache_dir()
@@ -235,7 +232,7 @@ def prepare_interferometers(det_names, sampling_frequency, duration, seed):
         
         ifo.maximum_frequency = maximum_frequency
         ifo.minimum_frequency = minimum_frequency
-    return ifos, on_source_data, off_source_data
+    return ifos, on_source_data, off_source_data, start_time
 
 
 def get_fd_data(strain_data: np.ndarray, times: np.ndarray, det: str, roll_off: float, fmin: float, fmax: float):
@@ -406,20 +403,31 @@ def run_pe_study(
     os.makedirs(outdir, exist_ok=True)
 
     print(">>>> Running PE study with seed =", seed, " <<<<")
-    ## SETUP INJECTION + PRIORS FOR ANALYSIS
+
+    # Setup logger and seed specifically for this run
+    bilby.core.utils.setup_logger(outdir=outdir, label=label)
+    bilby.core.utils.random.seed(seed)
+
+    ifos, on_source_data, off_source_data, segment_start_time = prepare_interferometers(
+        det_names,
+        sampling_frequency_local,
+        duration=duration,
+        seed=seed,
+    )
+
+    trigger_offset = 2.0  # seconds after segment start
+    trigger_time = segment_start_time + trigger_offset
 
     inj_prior = bilby.gw.prior.BBHPriorDict()
     injection_params = inj_prior.sample()
-    trigger_time = 2.0
-    injection_params['geocent_time'] = trigger_time
-    # delta functions for all params not in params_to_sample
+    injection_params["geocent_time"] = trigger_time
+
     analysis_prior = bilby.gw.prior.BBHPriorDict()
     analysis_prior["geocent_time"] = bilby.core.prior.Uniform(
         trigger_time - 0.1, trigger_time + 0.1, name="geocent_time"
     )
     analysis_prior.validate_prior(duration, minimum_frequency_local)
 
-    # print out the injection parameters, and analysis priors
     print("Injection parameters:")
     for k, v in injection_params.items():
         print(f"  {k}: {v}")
@@ -427,14 +435,6 @@ def run_pe_study(
     for k, v in analysis_prior.items():
         print(f"  {k}: {v}")
 
-    # Setup logger and seed specifically for this run
-    bilby.core.utils.setup_logger(outdir=outdir, label=label)
-    bilby.core.utils.random.seed(seed)
-
-    ifos, on_source_data, off_source_data = prepare_interferometers(det_names, 
-                                                                    sampling_frequency_local, 
-                                                                    duration=duration, 
-                                                                    seed=seed)
     evaluate_stationarity(
         data=off_source_data,
         sampling_frequency_hz=sampling_frequency_local,

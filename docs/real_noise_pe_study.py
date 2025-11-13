@@ -503,16 +503,16 @@ def run_pe_study(
       " df =", f[1]-f[0])
     
     fig = plt.figure(figsize=(7, 5))
-    plt.loglog(f, np.abs(on_source_f)**2, alpha=0.3, label="Data", color = "lightgray")
-    plt.loglog(freqs_welch, welch_psd, alpha=0.7, label="Welch PSD", color = "green")
-    plt.loglog(freqs_sgvb, sgvb_psd, alpha=1, label="SGVB PSD", color = "red")
+    plt.loglog(f, np.abs(on_source_f)**2, alpha=0.3, label="Data", color="lightgray")
+    plt.loglog(freqs_welch, welch_psd, alpha=0.7, label="Welch PSD", color="green")
+    plt.loglog(freqs_sgvb, sgvb_psd, alpha=1, label="SGVB PSD", color="red")
     plt.xlabel("Frequency [Hz]")
     plt.ylabel("PSD [strain²/Hz]")
     plt.legend()
     plt.tight_layout()
-    plt.show()
     outpath = f"{outdir}/SGVB_Welch_PSDs.png"
     fig.savefig(outpath, dpi=200)
+    plt.close(fig)
     
      
     # collect Original, Welch and SGVB PSDs
@@ -546,6 +546,7 @@ def run_pe_study(
             time_marginalization=True,
             phase_marginalization=False,
             distance_marginalization=True,
+            priors=analysis_prior,
             )
         print("Running analysis with", name, "PSD")
         print(likelihood.interferometers[0].power_spectral_density)
@@ -680,3 +681,4 @@ if __name__ == '__main__':
         seed = int(args[0])
         
     run_pe_study(seed=seed)
+

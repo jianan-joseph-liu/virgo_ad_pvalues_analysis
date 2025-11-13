@@ -123,7 +123,7 @@ def evaluate_stationarity(
     stationarity_sigma = float(np.std(power_time))
     
     fig, ax = plt.subplots(2, 1, figsize=(12, 8))
-    qspec.plot(ftype='log', axes=ax[0])
+    qspec.plot(norm='log', axes=ax[0])
     ax[0].set_title("Q-transform Spectrogram")
     ax[1].plot(qspec.times.value, power_time, lw=0.8)
     ax[1].axhline(1.0, color='gray', ls='--', lw=0.5)

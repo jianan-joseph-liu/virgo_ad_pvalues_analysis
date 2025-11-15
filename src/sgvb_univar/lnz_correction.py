@@ -7,8 +7,14 @@ We assume:
   - You already have the interferometers (with PSDs) constructed.
   - The waveform_generator is accessible from the result.
 
+The LnL we used:
+    lnL = -0.5 * sum_i sum_f [ |d_i(f) - h_i(f)|^2 / S_n_i(f) ]
+
+The correct LnL:
+    Lnl = -0.5 * sum_i sum_f [ |d_i(f) - h_i(f)|^2 / S_n_i(f) ] + (1/2) * sum_i sum_f log(S_n_i(f))
+
 The correction term is:
-    Δ = - (2 / T) * sum_i sum_f log(Sn_i(f))
+    Δ = -  sum_i sum_f log(Sn_i(f))
 which is constant for a given PSD model and affects the evidence normalization.
 """
 
@@ -41,7 +47,7 @@ def psd_ln_term(interferometers, duration):
                 f"PSD for {ifo.name} contains no positive finite samples; cannot compute lnZ correction."
             )
         safe_psd = psd[valid_mask]
-        correction -= (2.0 / T) * np.sum(np.log(safe_psd))
+        correction -=  np.sum(np.log(safe_psd))
     return correction
 
 

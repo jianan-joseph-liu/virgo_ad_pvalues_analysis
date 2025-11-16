@@ -23,7 +23,8 @@ outdir = "outdir"
 label = "GW150914"
 
 CACHE_DIR = Path("data_cache")
-PSD_METHODS = ("welch", "sgvb")
+PSD_METHODS = ("welch", "sgvb", "bayeswave")
+BAYESWAVE_PSD_FILE = CACHE_DIR / "GWTC1_GW150914_PSDs.dat"
 SGVB_SETTINGS = {
     "N_theta": 6000,
     "nchunks": 32,
@@ -63,6 +64,25 @@ def _cache_path(detector: str, start: float, end: float, kind: str) -> Path:
 def _psd_cache_path(detector: str, method: str) -> Path:
     tag = f"{_time_tag(psd_start_time)}_{_time_tag(psd_end_time)}"
     return CACHE_DIR / f"{detector}_{tag}_{method}_psd.npz"
+
+
+def load_bayeswave_psd(detector: str) -> Tuple[np.ndarray, np.ndarray]:
+    """Return the BayesWave PSD (frequency, value) pair for the requested detector."""
+    if not BAYESWAVE_PSD_FILE.exists():
+        raise FileNotFoundError(
+            f"BayesWave PSD file not found at {BAYESWAVE_PSD_FILE}. "
+            "Place GWTC1_GW150914_PSDs.dat in data_cache/ to enable the 'bayeswave' method."
+        )
+
+    table = np.loadtxt(BAYESWAVE_PSD_FILE, comments="#")
+    freq = table[:, 0]
+    if detector == "H1":
+        psd = table[:, 1]
+    elif detector == "L1":
+        psd = table[:, 2]
+    else:
+        raise ValueError(f"No BayesWave PSD column defined for detector {detector}.")
+    return freq, psd
 
 
 def _save_timeseries(ts: TimeSeries, path: Path) -> None:
@@ -203,47 +223,39 @@ def compute_psds(
     """Compute the PSD for each detector using all configured methods."""
     psds: Dict[str, Dict[str, Tuple[np.ndarray, np.ndarray]]] = {}
     for det, info in data_by_detector.items():
-        cache_hits = {}
-        missing_methods = []
+        psd_ts = info["psd_ts"]
+        sample_rate = info["sample_rate"]
+        psds[det] = {}
         for method in PSD_METHODS:
             cache_path = _psd_cache_path(det, method)
             if cache_path.exists():
                 with np.load(cache_path) as npz:
-                    cache_hits[method] = (np.asarray(npz["freq"]), np.asarray(npz["psd"]))
+                    freq = np.asarray(npz["freq"])
+                    psd_values = np.asarray(npz["psd"])
+                logger.info("Loaded cached %s PSD for %s from %s", method.upper(), det, cache_path)
             else:
-                missing_methods.append(method)
+                if method == "welch":
+                    freq, psd_values = estimate_welch_psd(psd_ts, duration, roll_off)
+                elif method == "sgvb":
+                    freq, psd_values = estimate_sgvb_psd(
+                        psd_ts,
+                        duration_seconds=duration,
+                        roll_off_seconds=roll_off,
+                        minimum_frequency_hz=minimum_frequency,
+                        maximum_frequency_hz=maximum_frequency,
+                        sampling_frequency_hz=sample_rate,
+                    )
+                elif method == "bayeswave":
+                    freq, psd_values = load_bayeswave_psd(det)
+                else:
+                    raise ValueError(f"Unknown PSD method '{method}'")
 
-        if not missing_methods:
-            logger.info("Loaded cached PSDs for %s from %s", det, CACHE_DIR)
-            psds[det] = cache_hits
-            continue
+                freq, psd_values = bandlimit_psd(freq, psd_values, minimum_frequency, maximum_frequency)
+                CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                np.savez_compressed(cache_path, freq=freq, psd=psd_values)
+                logger.info("Cached %s PSD for %s to %s", method.upper(), det, cache_path)
 
-        psd_ts = info["psd_ts"]
-        sample_rate = info["sample_rate"]
-
-        welch_freq, welch_psd = estimate_welch_psd(psd_ts, duration, roll_off)
-        welch_freq, welch_psd = bandlimit_psd(welch_freq, welch_psd, minimum_frequency, maximum_frequency)
-
-        sgvb_freq, sgvb_psd = estimate_sgvb_psd(
-            psd_ts,
-            duration_seconds=duration,
-            roll_off_seconds=roll_off,
-            minimum_frequency_hz=minimum_frequency,
-            maximum_frequency_hz=maximum_frequency,
-            sampling_frequency_hz=sample_rate,
-        )
-        sgvb_freq, sgvb_psd = bandlimit_psd(sgvb_freq, sgvb_psd, minimum_frequency, maximum_frequency)
-
-        psds[det] = {
-            "welch": (welch_freq, welch_psd),
-            "sgvb": (sgvb_freq, sgvb_psd),
-        }
-
-        for method, (freq, psd_vals) in psds[det].items():
-            cache_path = _psd_cache_path(det, method)
-            CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            np.savez_compressed(cache_path, freq=freq, psd=psd_vals)
-            logger.info("Cached %s PSD for %s to %s", method.upper(), det, cache_path)
+            psds[det][method] = (freq, psd_values)
     return psds
 
 
@@ -333,18 +345,28 @@ def run_parameter_estimation(
         results[method] = result
         result.plot_corner()
         
-    # compute Bayes factor SGVB vs Welch
+    # compute Bayes factors explicitly among the three PSD methods
     logZ_welch = results["welch"].log_evidence
     logZ_sgvb = results["sgvb"].log_evidence
-    logBF = logZ_sgvb - logZ_welch
-    BF = np.exp(logBF)
+    logZ_bayeswave = results["bayeswave"].log_evidence
 
-    print(f"logZ (welch) = {logZ_welch:.3f}")
-    print(f"logZ (sgvb)  = {logZ_sgvb:.3f}")
-    print(f"logBF (sgvb - welch) = {logBF:.3f}, BF = {BF:.3e}")
+    logBF_sgvb_welch = logZ_sgvb - logZ_welch
+    BF_sgvb_welch = np.exp(logBF_sgvb_welch)
+    logBF_bayeswave_welch = logZ_bayeswave - logZ_welch
+    BF_bayeswave_welch = np.exp(logBF_bayeswave_welch)
+    logBF_bayeswave_sgvb = logZ_bayeswave - logZ_sgvb
+    BF_bayeswave_sgvb = np.exp(logBF_bayeswave_sgvb)
+
+    print(f"logZ (welch)    = {logZ_welch:.3f}")
+    print(f"logZ (sgvb)     = {logZ_sgvb:.3f}")
+    print(f"logZ (bayeswave)= {logZ_bayeswave:.3f}")
+    print(f"logBF (sgvb - welch)      = {logBF_sgvb_welch:.3f}, BF = {BF_sgvb_welch:.3e}")
+    print(f"logBF (bayeswave - welch) = {logBF_bayeswave_welch:.3f}, BF = {BF_bayeswave_welch:.3e}")
+    print(f"logBF (bayeswave - sgvb)  = {logBF_bayeswave_sgvb:.3f}, BF = {BF_bayeswave_sgvb:.3e}")
 
     print("Welch posterior rows:", len(results["welch"].posterior))
-    print("SGVB  posterior rows:", len(results["sgvb"].posterior))    
+    print("SGVB  posterior rows:", len(results["sgvb"].posterior))
+    print("BAYESWAVE posterior rows:", len(results["bayeswave"].posterior))
 
     logz_corrected = {}
     logz_corrected = apply_psd_corrections(
@@ -367,6 +389,7 @@ def main() -> Dict[str, bilby.result.Result]:
     logger.info("Saving data plots to %s", outdir)
     interferometers_by_method["welch"].plot_data(outdir=outdir, label=f"{label}_welch")
     interferometers_by_method["sgvb"].plot_data(outdir=outdir, label=f"{label}_sgvb")
+    interferometers_by_method["bayeswave"].plot_data(outdir=outdir, label=f"{label}_bayeswave")
 
     return run_parameter_estimation(interferometers_by_method)
 

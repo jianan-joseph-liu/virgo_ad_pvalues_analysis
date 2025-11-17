@@ -5,6 +5,10 @@ import bilby
 import corner
 from sgvb_univar.psd_estimator import PSDEstimator
 from sgvb_univar.lnz_correction import apply_psd_corrections
+from sgvb_univar.compute_js_divergence import (
+    compute_welch_vs_sgvb,
+    save_js_table,
+)
 import numpy as np
 from gwpy.timeseries import TimeSeries
 from scipy.signal.windows import tukey
@@ -526,6 +530,13 @@ def run_pe_study(
     print(f"logZ (sgvb)  = {logZ_sgvb:.3f}")
     print(f"logBF (sgvb - welch) = {logBF:.3f}, BF = {BF:.3e}")
 
+    # Compute JS divergence between SGVB and Welch posteriors
+    param_names = list(results["welch"].search_parameter_keys)
+    js_df = compute_welch_vs_sgvb(param_names, results["sgvb"], results["welch"])
+    js_path = os.path.join(outdir, f"{label}_js_divergence.csv")
+    save_js_table(js_df, js_path)
+    print(f"Saved JS divergences to {js_path}")
+
     apply_psd_corrections(
         results,
         ifos_for_analysis,
@@ -540,7 +551,6 @@ def run_pe_study(
     # Produce an overlaid corner plot of the sampled posteriors
     post_w = results["welch"].posterior
     post_s = results["sgvb"].posterior
-    param_names = list(results["welch"].search_parameter_keys)
 
     samples_w = post_w[param_names].to_numpy()
     samples_s = post_s[param_names].to_numpy()
@@ -624,4 +634,3 @@ if __name__ == '__main__':
         seed = int(args[0])
         
     run_pe_study(seed=seed)
-

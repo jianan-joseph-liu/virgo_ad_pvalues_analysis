@@ -4,12 +4,12 @@
 #SBATCH --error=logs/gw150914_%A_%a.err
 #SBATCH --time=10:00:00
 #SBATCH --cpus-per-task=32
-#SBATCH --mem-per-cpu=1G
+#SBATCH --mem-per-cpu=4G
 #SBATCH --array=0-2  # This defines 3 array tasks with indices 0, 1, and 2
 
 module purge
-module load BLAH
-source BLAH
+module load python-scientific/3.10.4-foss-2022a
+source /fred/oz303/jliu/virtual_evns/sgvb_venv/bin/activate
 
 # Define the array of PSD names
 PSD_NAMES=('bayeswave' 'welch' 'sgvb')

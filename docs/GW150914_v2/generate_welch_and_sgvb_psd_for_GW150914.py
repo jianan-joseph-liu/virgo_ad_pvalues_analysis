@@ -27,12 +27,15 @@ CACHE_DIR = BASE_DIR / "data_cache"
 TRIGGER_TIME = 1126259462.4
 DETECTORS = ("H1", "L1")
 DURATION = 4
+POST_TRIGGER_DURATION = 2.0
 ROLL_OFF = 0.4
 MINIMUM_FREQUENCY = 20
 MAXIMUM_FREQUENCY = 1024
 
+ANALYSIS_END_TIME = TRIGGER_TIME + POST_TRIGGER_DURATION
+ANALYSIS_START_TIME = ANALYSIS_END_TIME - DURATION
 PSD_DURATION = 32 * DURATION
-PSD_END_TIME = TRIGGER_TIME
+PSD_END_TIME = ANALYSIS_START_TIME
 PSD_START_TIME = PSD_END_TIME - PSD_DURATION
 
 SGVB_SETTINGS = {
@@ -152,8 +155,14 @@ def estimate_sgvb_psd(ts: TimeSeries, sample_rate: float) -> Tuple[np.ndarray, n
 
 
 def compute_periodogram(ts: TimeSeries) -> Tuple[np.ndarray, np.ndarray]:
+    """Compute a simple periodogram using only the final analysis segment."""
+    sample_rate = _get_sample_rate(ts)
+    n_samples = int(round(DURATION * sample_rate))
+
+    segment = ts[-n_samples:]
+
     tukey_alpha = 2 * ROLL_OFF / DURATION
-    spectrum = ts.periodogram(fftlength=DURATION, overlap=0, window=("tukey", tukey_alpha))
+    spectrum = segment.psd(fftlength=DURATION, overlap=0, window=("tukey", tukey_alpha))
     return np.asarray(spectrum.frequencies.value), np.asarray(spectrum.value)
 
 
@@ -175,8 +184,8 @@ def plot_psd_comparison(
 
     plt.figure(figsize=(8, 5))
     plt.loglog(freq_periodogram, psd_periodogram, label="Periodogram", color="0.6", lw=1)
-    plt.loglog(freq_welch, psd_welch, label="Welch", lw=1.5)
-    plt.loglog(freq_sgvb, psd_sgvb, label="SGVB", lw=1.5)
+    plt.loglog(freq_welch, psd_welch, label="Welch", lw=1)
+    plt.loglog(freq_sgvb, psd_sgvb, label="SGVB", lw=1)
     plt.xlim(MINIMUM_FREQUENCY, MAXIMUM_FREQUENCY)
     plt.xlabel("Frequency [Hz]")
     plt.ylabel(r"PSD [$1/\mathrm{Hz}$]")

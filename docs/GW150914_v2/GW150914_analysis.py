@@ -189,15 +189,17 @@ result.plot_corner()
 
 
 def compute_psd_factor(interferometers: bilby.gw.detector.InterferometerList) -> float:
-    """Compute -log(sum(PSD)) across all interferometers in the analysis band."""
+    """Compute -sum(log(PSD)) across all interferometers in the analysis band."""
     total = 0.0
     for ifo in interferometers:
-        freq = ifo.power_spectral_density.frequency_array
-        psd_vals = ifo.power_spectral_density_array
-        mask = (freq >= ifo.minimum_frequency) & (freq <= ifo.maximum_frequency)
+        psd_vals = np.asarray(ifo.power_spectral_density_array, dtype=float)
+        mask     = ifo.frequency_mask
         band_psd = psd_vals[mask]
-        
-        total += -np.log(np.sum(band_psd))
+
+        valid    = np.isfinite(band_psd) & (band_psd > 0.0)
+        band_psd = band_psd[valid]
+
+        total -= np.sum(np.log(band_psd))
     return float(total)
 
 

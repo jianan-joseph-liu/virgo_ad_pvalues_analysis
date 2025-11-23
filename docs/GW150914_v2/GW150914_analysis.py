@@ -194,9 +194,9 @@ def compute_psd_factor(interferometers: bilby.gw.detector.InterferometerList) ->
     for ifo in interferometers:
         psd_vals = np.asarray(ifo.power_spectral_density_array, dtype=float)
         mask     = ifo.frequency_mask
-        band_psd = psd_vals#[mask]
+        band_psd = psd_vals[mask]
 
-        valid    = np.isfinite(band_psd) #& (band_psd > 0.0)
+        valid    = np.isfinite(band_psd) & (band_psd > 0.0)
         band_psd = band_psd[valid]
 
         total -= np.sum(np.log(band_psd))

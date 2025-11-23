@@ -30,7 +30,7 @@ DURATION = 4
 POST_TRIGGER_DURATION = 2.0
 ROLL_OFF = 0.4
 MINIMUM_FREQUENCY = 20
-MAXIMUM_FREQUENCY = 1024
+MAXIMUM_FREQUENCY = 896
 
 ANALYSIS_END_TIME = TRIGGER_TIME + POST_TRIGGER_DURATION
 ANALYSIS_START_TIME = ANALYSIS_END_TIME - DURATION
@@ -44,7 +44,7 @@ SGVB_SETTINGS = {
     "ntrain_map": 10000,
     "N_samples": 500,
     "degree_fluctuate": 8000,
-    "lr": 0.0078,
+    "lr": 0.008,
     "max_hyperparm_eval": 1,
     "n_elbo_maximisation_steps": 600,
 }

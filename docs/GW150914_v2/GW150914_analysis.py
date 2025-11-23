@@ -57,7 +57,7 @@ elif args.psd == 'sgvb':
 # END OF NEW ADDITION
 
 prior_file = "GW150914.prior"
-label = "GW150914"
+label = f"GW150914_{args.psd}"
 outdir = "outdir"
 checkpoint_delta_t = 1800  # seconds
 
@@ -186,5 +186,50 @@ result = bilby.run_sampler(
     result_class=bilby.gw.result.CBCResult,
 )
 result.plot_corner()
-logger.info(f"LnZ = {result.log_evidence:.3f} ± {result.log_evidence_err:.3f}")
-logger.info("Noise LnZ = {0:.3f}".format(result.log_noise_evidence))
+
+
+def compute_psd_factor(interferometers: bilby.gw.detector.InterferometerList) -> float:
+    """Compute -log(sum(PSD)) across all interferometers in the analysis band."""
+    total = 0.0
+    for ifo in interferometers:
+        freq = ifo.power_spectral_density.frequency_array
+        psd_vals = ifo.power_spectral_density_array
+        mask = (freq >= ifo.minimum_frequency) & (freq <= ifo.maximum_frequency)
+        band_psd = psd_vals[mask]
+        
+        total += -np.log(np.sum(band_psd))
+    return float(total)
+
+
+psd_factor = compute_psd_factor(ifo_list)
+log_evidence_corrected = result.log_evidence + psd_factor
+log_noise_corrected = result.log_noise_evidence + psd_factor
+log_BF = log_evidence_corrected - log_noise_corrected
+
+print(f"log_evidence (corrected)          : {log_evidence_corrected:.2f}")
+print(f"log_noise_evidence (corrected)    : {log_noise_corrected:.2f}")
+print(f"log Bayes factor                  : {log_BF:.2f}")
+
+
+csv_path = Path(outdir) / "log_evidence_summary.csv"
+header = "method,log_evidence_corrected,log_noise_evidence_corrected,log_BF\n"
+line = f"{args.psd},{log_evidence_corrected:.2f},{log_noise_corrected:.2f},{log_BF:.2f}\n"
+
+if not csv_path.exists():
+    csv_path.write_text(header + line)
+else:
+    with open(csv_path, "a") as csv_file:
+        csv_file.write(line)
+
+
+
+
+
+
+
+
+
+
+
+
+

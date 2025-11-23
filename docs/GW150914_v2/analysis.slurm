@@ -4,7 +4,7 @@
 #SBATCH --error=logs/gw150914_%A_%a.err
 #SBATCH --time=10:00:00
 #SBATCH --cpus-per-task=32
-#SBATCH --mem-per-cpu=4G
+#SBATCH --mem-per-cpu=1G
 #SBATCH --array=0-2  # This defines 3 array tasks with indices 0, 1, and 2
 
 module purge

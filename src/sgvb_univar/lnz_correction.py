@@ -27,10 +27,13 @@ logger = bilby.core.utils.logger
 
 def psd_ln_term(interferometers, duration):
     """Compute the PSD normalization term (?^'2/T * I? log S_n(f))."""
-    T = duration
+    
     correction = 0.0
     for ifo in interferometers:
         psd = np.asarray(ifo.power_spectral_density_array, dtype=float)
+        mask = getattr(ifo, "frequency_mask", None)
+        if mask is not None:
+            psd = psd[mask]
         finite_mask = np.isfinite(psd)
         positive_mask = psd > 0.0
         valid_mask = finite_mask & positive_mask
@@ -80,7 +83,7 @@ def apply_psd_correction(result, interferometers, duration=None):
 
 
 def apply_psd_corrections(results, interferometers, methods, outdir, duration=None):
-    logz_corrected = {}
+    corrected_summary = {}
     print("Applying PSD normalization corrections...")
     for method in methods:
         corrected = apply_psd_correction(results[method], interferometers[method], duration=duration)
@@ -89,19 +92,25 @@ def apply_psd_corrections(results, interferometers, methods, outdir, duration=No
             f"{corrected['psd_norm_correction']:.3f}"
         )
         logZ_corr = corrected["log_evidence"]
+        logZ_noise_corr = corrected["log_noise_evidence"]
+        logBF_signal_noise = logZ_corr - logZ_noise_corr
         print(f"{method.upper()} corrected logZ: {logZ_corr:.3f}")
-        logz_corrected[method] = logZ_corr
-
-    logBF_corrected = logz_corrected["sgvb"] - logz_corrected["welch"]
-    print(f"Corrected logBF (sgvb - welch) = {logBF_corrected:.3f}, BF = {np.exp(logBF_corrected):.3e}")    
+        print(f"{method.upper()} corrected logZ_noise: {logZ_noise_corr:.3f}")
+        print(f"{method.upper()} corrected logBF (signal - noise): {logBF_signal_noise:.3f}")
+        corrected_summary[method] = {
+            "log_evidence": logZ_corr,
+            "log_noise_evidence": logZ_noise_corr,
+            "log_bayes_factor": logBF_signal_noise,
+        }
 
     # Save corrected logZ values as a file
     with open(os.path.join(outdir, "corrected_logZ.txt"), "w") as f:
+        f.write("method,log_evidence,log_noise_evidence,log_bayes_factor\n")
         for method in methods:
-            f.write(f"{method} corrected logZ: {logz_corrected[method]:.6f}\n")
-        logBF_corrected = logz_corrected["sgvb"] - logz_corrected["welch"]
-        f.write(
-            f"Corrected logBF (sgvb - welch) = {logBF_corrected:.6f}, BF = {np.exp(logBF_corrected):.6e}\n"
-        )
+            summary = corrected_summary[method]
+            f.write(
+                f"{method},{summary['log_evidence']:.6f},"
+                f"{summary['log_noise_evidence']:.6f},{summary['log_bayes_factor']:.6f}\n"
+            )
 
-    return results
+    return corrected_summary

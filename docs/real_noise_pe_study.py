@@ -105,9 +105,7 @@ def get_noise_segment_from_seed(segment_file, data_dir, seed):
 def evaluate_stationarity(
     data,
     fs,
-    label: str,
-    outdir: str,
-    frange=(20.0, 1024.0),
+    frange=(20.0, 896.0),
     qrange=(4.0, 32.0),
     pad=1.0,
     whiten: bool = True,
@@ -125,22 +123,6 @@ def evaluate_stationarity(
     power_time = np.sum(np.abs(qspec.value)**2, axis=0)
     power_time = power_time / (np.median(power_time))
     stationarity_sigma = float(np.std(power_time))
-    
-    '''
-    fig, ax = plt.subplots(2, 1, figsize=(12, 8))
-    qspec.plot(norm='log', axes=ax[0])
-    ax[0].set_title("Q-transform Spectrogram")
-    ax[1].plot(qspec.times.value, power_time, lw=0.8)
-    ax[1].axhline(1.0, color='gray', ls='--', lw=0.5)
-    ax[1].set_xlabel("Time [s]")
-    ax[1].set_ylabel("Normalized power")
-    ax[1].set_title(f"Stationarity (σ={stationarity_sigma:.3f})")
-    plt.tight_layout()
-
-    plot_path = os.path.join(outdir, f"{label}_stationarity.png")
-    fig.savefig(plot_path, dpi=200)
-    plt.close(fig)
-    '''
 
     return stationarity_sigma
 
@@ -338,7 +320,7 @@ def run_pe_study(
         sampling_frequency_local=sampling_frequency,
         minimum_frequency_local=minimum_frequency,
         maximum_frequency_local=maximum_frequency,
-        outdir="outdir_pe_study",
+        outdir_="outdir_pe_study",
         sgvb_settings=None,
         seed=0,
 ):
@@ -380,21 +362,19 @@ def run_pe_study(
     for k, v in analysis_prior.items():
         print(f"  {k}: {v}")
 
-    off_source_sigma = evaluate_stationarity(
+    off_sigma = evaluate_stationarity(
         data=off_source_data,
         fs=sampling_frequency_local,
-        label=f"{label}_psd_segment",
-        outdir=outdir,
+        pad=1.0
     )
-    print(f"[stationarity] Off-source segment σ = {off_source_sigma:.3f}")
+    print(f"[stationarity] Off-source segment σ = {off_sigma:.3f}")
     
-    on_source_sigma = evaluate_stationarity(
+    on_sigma = evaluate_stationarity(
         data=on_source_data,
         fs=sampling_frequency_local,
-        label=f"{label}_analysis_segment",
-        outdir=outdir
+        pad=0.25
     )
-    print(f"[stationarity] On-source segment σ = {on_source_sigma:.3f}")
+    print(f"[stationarity] On-source segment σ = {on_sigma:.3f}")
     
     
     ifos.inject_signal(waveform_generator=waveform_generator, parameters=injection_params)
@@ -468,10 +448,10 @@ def run_pe_study(
     ifos_sgvb = copy.deepcopy(ifos)
     
     welch_psd_object = PowerSpectralDensity.from_amplitude_spectral_density_array(
-        freqs_welch, np.sqrt(welch_psd)
+        freqs_welch, welch_psd
     )
     sgvb_psd_object = PowerSpectralDensity.from_amplitude_spectral_density_array(
-        freqs_sgvb, np.sqrt(sgvb_psd)
+        freqs_sgvb, sgvb_psd
     )
     
     for i in range(len(ifos)):
@@ -519,16 +499,7 @@ def run_pe_study(
                 conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
             )
         results[name] = res
-
-    # compute Bayes factor SGVB vs Welch
-    logZ_welch = results["welch"].log_evidence
-    logZ_sgvb = results["sgvb"].log_evidence
-    logBF = logZ_sgvb - logZ_welch
-    BF = np.exp(logBF)
-
-    print(f"logZ (welch) = {logZ_welch:.3f}")
-    print(f"logZ (sgvb)  = {logZ_sgvb:.3f}")
-    print(f"logBF (sgvb - welch) = {logBF:.3f}, BF = {BF:.3e}")
+        
 
     # Compute JS divergence between SGVB and Welch posteriors
     param_names = list(results["welch"].search_parameter_keys)
@@ -537,83 +508,10 @@ def run_pe_study(
     save_js_table(js_df, js_path)
     print(f"Saved JS divergences to {js_path}")
 
-    apply_psd_corrections(
-        results,
-        ifos_for_analysis,
-        psd_methods,
-        outdir,
-        duration=duration,
-    )
-
     print("Welch posterior rows:", len(results["welch"].posterior))
     print("SGVB  posterior rows:", len(results["sgvb"].posterior))
 
-    # Produce an overlaid corner plot of the sampled posteriors
-    post_w = results["welch"].posterior
-    post_s = results["sgvb"].posterior
-
-    samples_w = post_w[param_names].to_numpy()
-    samples_s = post_s[param_names].to_numpy()
-
-    fig = corner.corner(samples_w, labels=param_names, color='C0', show_titles=True,
-                        title_fmt='.2f', plot_datapoints=False)
-    corner.corner(samples_s, labels=param_names, fig=fig, color='C1', plot_datapoints=False,
-                  plot_contours=True, fill_contours=False)
-    fig.set_size_inches(10, 10) 
-    handles = [Line2D([0],[0], color="C0", lw=2),
-               Line2D([0],[0], color="C1", lw=2)]
-    labels  = ["Welch", "SGVB"]
-    fig.legend(handles, labels, loc="upper right")
-    fig.suptitle(f"Overlaid posteriors: SGVB (C1) vs Welch (C0)\nlogBF={logBF:.2f}")
-    fig.tight_layout()
-    outpath = f"{outdir}/{label}_overlaid_corner.png"
-    fig.savefig(outpath, dpi=200)
-    print(f"Saved overlaid corner to {outpath}")
-
-    # Make a corner plot for the last result as in the original example.
-    outpath2 = f"{outdir}/{label}_sgvb_corner.png"
-    results['sgvb'].plot_corner(parameters=param_names,
-                                priors=False,
-                                save=True,
-                                filename=outpath2,
-                                dpi=200)
-
     # --- Save results (compact numeric file) ---
-    metrics_root = "outdir_pe_study"
-    os.makedirs(metrics_root, exist_ok=True)
-    metrics_path = os.path.join(metrics_root, "metrics.h5")
-    
-    with h5py.File(metrics_path, "a") as hf:
-        g_run = hf.create_group(label)
-        g_run.attrs["logZ_welch"] = logZ_welch
-        g_run.attrs["logZ_sgvb"]  = logZ_sgvb
-        g_run.attrs["logBF"]      = logBF
-    
-        for k, v in injection_params.items():
-            try:
-                g_run.attrs[f"inj_{k}"] = float(v)
-            except:
-                pass
-    
-        for method in ["welch", "sgvb"]:
-            g_method = g_run.create_group(method)
-            post_df = results[method].posterior
-            keys    = list(results[method].search_parameter_keys)
-    
-            for p in keys:
-                s   = post_df[p].to_numpy()
-                m   = np.mean(s)
-                q05, q95 = np.percentile(s, [5, 95])
-                w90 = q95 - q05
-                true_val = injection_params.get(p, np.nan)
-                bias = m - true_val
-                inside = 1 if (true_val >= q05 and true_val <= q95) else 0
-                cred_level = np.mean(s <= true_val)
-    
-                g_method.create_dataset(
-                    p,
-                    data=np.array([m, true_val, bias, w90, inside, cred_level], dtype=float)
-                )
 
     meta = dict(
         welch_freq=freqs_welch,
@@ -621,6 +519,36 @@ def run_pe_study(
         sgvb_freq=freqs_sgvb,
         sgvb_median=sgvb_psd,
     )
+
+    
+    logz_corrected = apply_psd_corrections(
+        results,
+        ifos_for_analysis,
+        psd_methods,
+        outdir,
+        duration=duration,
+    )
+
+    csv_path = os.path.join(outdir, "log_evidence_summary.csv")
+    header = (
+        "seed,"
+        "sgvb_log_evidence,sgvb_log_noise_evidence,sgvb_log_bayes_factor,"
+        "welch_log_evidence,welch_log_noise_evidence,welch_log_bayes_factor,"
+        "off_source_sigma,on_source_sigma\n"
+    )
+    if not os.path.exists(csv_path):
+        with open(csv_path, "w") as csv_file:
+            csv_file.write(header)
+
+    with open(csv_path, "a") as csv_file:
+        sgvb = logz_corrected["sgvb"]
+        welch = logz_corrected["welch"]
+        csv_file.write(
+            f"{seed},"
+            f"{sgvb['log_evidence']:.2f},{sgvb['log_noise_evidence']:.2f},{sgvb['log_bayes_factor']:.2f},"
+            f"{welch['log_evidence']:.2f},{welch['log_noise_evidence']:.2f},{welch['log_bayes_factor']:.2f},"
+            f"{off_sigma:.2f},{on_sigma:.2f}\n"
+        )
     
     
     return results, meta

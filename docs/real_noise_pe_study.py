@@ -20,6 +20,7 @@ import multiprocessing as mp
 import sys
 import os, re, glob
 import h5py
+from pathlib import Path
 
 
 duration = 4.0
@@ -94,6 +95,62 @@ def load_local_ts(data_dir, t0, t1):
 # get noise data, start from GPS time = 1256664443.
 '''
 segment_file = "H1_valid_segments_1256664443-1269361988.txt"
+INJECTION_CSV = Path(__file__).resolve().parent / "bbh_injections_snr_10_50_clean.csv"
+_injection_catalog = None
+INJECTION_COLUMN_MAP = [
+    "mass_ratio",
+    "chirp_mass",
+    "luminosity_distance",
+    "dec",
+    "ra",
+    "theta_jn",
+    "psi",
+    "phase",
+    "a_1",
+    "a_2",
+    "tilt_1",
+    "tilt_2",
+    "phi_12",
+    "phi_jl",
+]
+
+
+def _load_injection_catalog():
+    global _injection_catalog
+    if _injection_catalog is None:
+        if not INJECTION_CSV.exists():
+            raise FileNotFoundError(
+                f"Injection catalog not found at {INJECTION_CSV}; cannot sample injections."
+            )
+        _injection_catalog = np.genfromtxt(
+            INJECTION_CSV,
+            delimiter=",",
+            names=True,
+            dtype=None,
+            encoding=None,
+        )
+    return _injection_catalog
+
+
+def sample_injection_from_catalog(seed: int, h1_snr_threshold: float = 10.0) -> dict:
+    catalog = _load_injection_catalog()
+    if "H1_snr" not in catalog.dtype.names:
+        raise ValueError("Injection catalog missing 'H1_snr' column.")
+    mask = catalog["H1_snr"] > h1_snr_threshold
+    filtered = catalog[mask]
+    if filtered.size == 0:
+        raise ValueError(
+            f"No injections exceed H1_snr>{h1_snr_threshold} in {INJECTION_CSV}."
+        )
+    rng = np.random.default_rng(seed)
+    row = rng.choice(filtered)
+    params = {}
+    for key in INJECTION_COLUMN_MAP:
+        if key in filtered.dtype.names:
+            params[key] = float(row[key])
+    return params
+
+
 def get_noise_segment_from_seed(segment_file, data_dir, seed):
     segments = np.loadtxt(segment_file, dtype=np.int64, skiprows=1)
     t0, t1 = segments[seed]
@@ -347,7 +404,12 @@ def run_pe_study(
 
     inj_prior = bilby.gw.prior.BBHPriorDict()
     injection_params = inj_prior.sample()
+    catalog_params = sample_injection_from_catalog(seed)
+    injection_params.update(catalog_params)
     injection_params["geocent_time"] = trigger_time
+    print("Selected injection from catalog (H1_snr > 10):")
+    for key, value in catalog_params.items():
+        print(f"  {key}: {value}")
 
     analysis_prior = bilby.gw.prior.BBHPriorDict()
     analysis_prior["geocent_time"] = bilby.core.prior.Uniform(

@@ -564,6 +564,7 @@ def run_pe_study(
                 injection_parameters=injection_params,
                 outdir=outdir,
                 label=run_label,
+                resume=False,
                 conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
             )
         results[name] = res

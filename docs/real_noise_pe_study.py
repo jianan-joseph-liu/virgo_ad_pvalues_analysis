@@ -529,7 +529,14 @@ def run_pe_study(
 
     # Now we do the analysis twice, once with each PSD
     results = {}
+    optimal_snrs = {}
+    h_pols = waveform_generator.frequency_domain_strain(injection_params)
     for name, analysis_ifos in ifos_for_analysis.items():
+        ifo = analysis_ifos[0]
+        h_ifo = ifo.get_detector_response(h_pols, injection_params)
+        snr2 = ifo.optimal_snr_squared(h_ifo)
+        optimal_snrs[name] = float(np.sqrt(np.real(snr2)))
+        
         print("Running analysis with", name, "PSD")
         run_label = f"{label}_{name}"
         result_json = os.path.join(outdir, f"{run_label}_result.json")
@@ -562,6 +569,12 @@ def run_pe_study(
             )
         results[name] = res
         
+    print(
+        f"Optimal SNR (H1): "
+        f"Welch = {optimal_snrs['welch']:.2f}, "
+        f"SGVB = {optimal_snrs['sgvb']:.2f}"
+    )    
+        
 
     # Compute JS divergence between SGVB and Welch posteriors
     param_names = list(results["welch"].search_parameter_keys)
@@ -591,11 +604,11 @@ def run_pe_study(
         duration=duration,
     )
 
-    csv_path = os.path.join(outdir, "log_evidence_summary.csv")
+    csv_path = os.path.join(outdir_, "log_evidence_summary.csv")
     header = (
         "seed,"
-        "sgvb_log_evidence,sgvb_log_noise_evidence,sgvb_log_bayes_factor,"
-        "welch_log_evidence,welch_log_noise_evidence,welch_log_bayes_factor,"
+        "sgvb_log_evidence,sgvb_log_noise_evidence,sgvb_log_bayes_factor, sgvb_optimal_snr,"
+        "welch_log_evidence,welch_log_noise_evidence,welch_log_bayes_factor, welch_optimal_snr,"
         "off_source_sigma,on_source_sigma\n"
     )
     if not os.path.exists(csv_path):
@@ -607,8 +620,8 @@ def run_pe_study(
         welch = logz_corrected["welch"]
         csv_file.write(
             f"{seed},"
-            f"{sgvb['log_evidence']:.2f},{sgvb['log_noise_evidence']:.2f},{sgvb['log_bayes_factor']:.2f},"
-            f"{welch['log_evidence']:.2f},{welch['log_noise_evidence']:.2f},{welch['log_bayes_factor']:.2f},"
+            f"{sgvb['log_evidence']:.2f},{sgvb['log_noise_evidence']:.2f},{sgvb['log_bayes_factor']:.2f},{optimal_snrs['sgvb']:.2f},"
+            f"{welch['log_evidence']:.2f},{welch['log_noise_evidence']:.2f},{welch['log_bayes_factor']:.2f},{optimal_snrs['welch']:.2f},"
             f"{off_sigma:.2f},{on_sigma:.2f}\n"
         )
     

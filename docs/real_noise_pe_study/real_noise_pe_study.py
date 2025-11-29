@@ -412,9 +412,7 @@ def run_pe_study(
         print(f"  {key}: {value}")
 
     analysis_prior = bilby.gw.prior.BBHPriorDict()
-    #analysis_prior["geocent_time"] = bilby.core.prior.Uniform(
-    #    trigger_time - 0.1, trigger_time + 0.1, name="geocent_time"
-    #)
+    analysis_prior["geocent_time"] = trigger_time
     analysis_prior.validate_prior(duration, minimum_frequency_local)
 
     print("Injection parameters:")

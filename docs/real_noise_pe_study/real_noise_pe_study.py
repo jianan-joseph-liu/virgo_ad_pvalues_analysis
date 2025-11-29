@@ -549,6 +549,9 @@ def run_pe_study(
                 phase_marginalization=False,
                 distance_marginalization=True,
                 priors=analysis_prior,
+                jitter_time=True,
+                reference_frame="sky",
+                time_reference="geocent",
             )
 
             npool = min(mp.cpu_count(), int(os.environ.get("SLURM_CPUS_PER_TASK", "1")))

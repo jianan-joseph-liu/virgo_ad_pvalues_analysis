@@ -552,6 +552,11 @@ def run_pe_study(
                 distance_marginalization=True,
                 priors=analysis_prior,
             )
+            
+            test_params = analysis_prior.sample()
+            ll = likelihood.log_likelihood(test_params)
+            print("Test logL:", ll)
+
             npool = min(mp.cpu_count(), int(os.environ.get("SLURM_CPUS_PER_TASK", "1")))
             print("npool = ", npool)
             res = bilby.run_sampler(

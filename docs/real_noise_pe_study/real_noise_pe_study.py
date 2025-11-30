@@ -136,7 +136,7 @@ def sample_injection_from_catalog(seed: int, h1_snr_threshold: float = 10.0) -> 
     catalog = _load_injection_catalog()
     if "H1_snr" not in catalog.dtype.names:
         raise ValueError("Injection catalog missing 'H1_snr' column.")
-    mask = catalog["H1_snr"] > h1_snr_threshold
+    mask = catalog["network_snr"] > h1_snr_threshold
     filtered = catalog[mask]
     if filtered.size == 0:
         raise ValueError(

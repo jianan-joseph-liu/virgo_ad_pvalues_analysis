@@ -510,10 +510,10 @@ def run_pe_study(
     ifos_sgvb = copy.deepcopy(ifos)
     
     welch_psd_object = PowerSpectralDensity.from_amplitude_spectral_density_array(
-        freqs_welch, welch_psd
+        freqs_welch, np.sqrt(welch_psd)
     )
     sgvb_psd_object = PowerSpectralDensity.from_amplitude_spectral_density_array(
-        freqs_sgvb, sgvb_psd
+        freqs_sgvb, np.sqrt(sgvb_psd)
     )
     
     for i in range(len(ifos)):

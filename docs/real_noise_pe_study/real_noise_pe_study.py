@@ -136,7 +136,7 @@ def sample_injection_from_catalog(seed: int, h1_snr_threshold: float = 10.0) -> 
     catalog = _load_injection_catalog()
     if "H1_snr" not in catalog.dtype.names:
         raise ValueError("Injection catalog missing 'H1_snr' column.")
-    mask = catalog["network_snr"] > h1_snr_threshold
+    mask = catalog["H1_snr"] > h1_snr_threshold
     filtered = catalog[mask]
     if filtered.size == 0:
         raise ValueError(
@@ -555,6 +555,16 @@ def run_pe_study(
                 reference_frame="sky",
                 time_reference="geocent",
             )
+            
+            test_params = analysis_prior.sample()
+            test_params["geocent_time"] = trigger_time
+            likelihood.parameters.update(test_params)
+            
+            try:
+                ll = likelihood.log_likelihood()
+                print(f"[debug] {name} test logL = {ll}")
+            except Exception as e:
+                print(f"[debug] log_likelihood error for {name}:", repr(e))
 
             npool = min(mp.cpu_count(), int(os.environ.get("SLURM_CPUS_PER_TASK", "1")))
             print("npool = ", npool)

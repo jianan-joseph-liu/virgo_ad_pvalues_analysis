@@ -555,16 +555,6 @@ def run_pe_study(
                 reference_frame="sky",
                 time_reference="geocent",
             )
-            
-            test_params = analysis_prior.sample()
-            test_params["geocent_time"] = trigger_time
-            likelihood.parameters.update(test_params)
-            
-            try:
-                ll = likelihood.log_likelihood()
-                print(f"[debug] {name} test logL = {ll}")
-            except Exception as e:
-                print(f"[debug] log_likelihood error for {name}:", repr(e))
 
             npool = min(mp.cpu_count(), int(os.environ.get("SLURM_CPUS_PER_TASK", "1")))
             print("npool = ", npool)

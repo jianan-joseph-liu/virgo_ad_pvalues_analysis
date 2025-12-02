@@ -275,7 +275,7 @@ def run_pe_study(
     cache_dir = _ensure_cache_dir()
 
     for ifo in noise_ifos:
-        noise_strain = ifo.strain_data.time_domain_strain.value
+        noise_strain = ifo.strain_data.time_domain_strain
         cache_path = os.path.join(cache_dir, f"{label}_{ifo.name}_noise.npz")
         np.savez_compressed(
             cache_path,

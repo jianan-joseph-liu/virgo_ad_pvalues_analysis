@@ -19,6 +19,7 @@ from matplotlib.lines import Line2D
 import os
 import multiprocessing as mp
 import sys
+import h5py
 
 CACHE_ROOT = os.path.join("outdir_simulate_pe_study", "cache")
 
@@ -253,6 +254,19 @@ def run_pe_study(
     inj_prior = bilby.gw.prior.BBHPriorDict()
     injection_params = inj_prior.sample()
     injection_params['geocent_time'] = 2.0
+
+    injections_h5 = os.path.join(outdir_, "injection_parameters.h5")
+    os.makedirs(os.path.dirname(injections_h5), exist_ok=True)
+    with h5py.File(injections_h5, "a") as hf:
+        group_name = f"seed_{seed}"
+        if group_name in hf:
+            del hf[group_name]
+        grp = hf.create_group(group_name)
+        for key, value in injection_params.items():
+            try:
+                grp.attrs[key] = float(value)
+            except (TypeError, ValueError):
+                grp.attrs[key] = str(value)
 
     analysis_prior = bilby.gw.prior.BBHPriorDict()
     analysis_prior["geocent_time"] = bilby.core.prior.Uniform(
@@ -493,10 +507,6 @@ if __name__ == '__main__':
         seed = int(args[0])
         
     run_pe_study(seed=seed)
-
-
-
-
 
 
 

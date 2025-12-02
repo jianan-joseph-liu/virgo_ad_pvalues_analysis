@@ -296,7 +296,7 @@ def run_pe_study(
         on_source = TimeSeries(
             on_source_data,
             dt=ifo.strain_data.dt.value,
-            epoch=ifo.strain_data.start_time + duration * 32,
+            epoch=ifo.strain_data.start_time
         )
         
     # Compute Welch PSD + SGVB PSD
@@ -356,7 +356,7 @@ def run_pe_study(
     fig.savefig(outpath, dpi=200)
 
     # input simulated on source noise into InterferometerList and inject the signal
-    ifos_analysis = prepare_analysis_ifos(det_names, on_source_data)
+    ifos_analysis = prepare_analysis_ifos(det_names, on_source)
     ifos_analysis.inject_signal(waveform_generator=waveform_generator, parameters=injection_params)
 
     # collect Original, Welch and SGVB PSDs

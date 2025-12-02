@@ -280,7 +280,7 @@ def run_pe_study(
         np.savez_compressed(
             cache_path,
             strain=noise_strain,
-            dt=float(ifo.strain_data.dt.value),
+            dt=float(ifo.strain_data.dt),
             start=float(ifo.strain_data.start_time),
         )
 
@@ -290,12 +290,12 @@ def run_pe_study(
 
         off_source = TimeSeries(
             off_source_data,
-            dt=ifo.strain_data.dt.value,
+            dt=ifo.strain_data.dt,
             epoch=ifo.strain_data.start_time,
         )
         on_source = TimeSeries(
             on_source_data,
-            dt=ifo.strain_data.dt.value,
+            dt=ifo.strain_data.dt,
             epoch=ifo.strain_data.start_time
         )
         

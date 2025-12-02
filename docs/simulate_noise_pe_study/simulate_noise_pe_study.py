@@ -280,8 +280,7 @@ def run_pe_study(
         np.savez_compressed(
             cache_path,
             strain=noise_strain,
-            dt=float(ifo.strain_data.dt),
-            start=float(ifo.strain_data.start_time),
+            dt=1/sampling_frequency_local
         )
 
         off_samples = int(duration * 32 * sampling_frequency_local)
@@ -290,13 +289,13 @@ def run_pe_study(
 
         off_source = TimeSeries(
             off_source_data,
-            dt=ifo.strain_data.dt,
-            epoch=ifo.strain_data.start_time,
+            dt=1/sampling_frequency_local,
+            epoch=0.0,
         )
         on_source = TimeSeries(
             on_source_data,
-            dt=ifo.strain_data.dt,
-            epoch=ifo.strain_data.start_time
+            dt=1/sampling_frequency_local,
+            epoch=0.0
         )
         
     # Compute Welch PSD + SGVB PSD

@@ -339,7 +339,7 @@ def run_pe_study(
     N = len(on_source_data)                   
     times = np.arange(N) / sampling_frequency_local         
     f, on_source_f = get_fd_data(on_source_data, times = times, det='H1',
-                              roll_off = 0.4, fmin = minimum_frequency, fmax = None)
+                              roll_off = 0.4, fmin = minimum_frequency, fmax = maximum_frequency)
 
     fig = plt.figure(figsize=(7, 5))
     plt.loglog(f, np.abs(on_source_f)**2, alpha=0.3, label="Data", color = "lightgray")

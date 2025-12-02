@@ -192,7 +192,7 @@ def window_in_chunks(x: np.ndarray, n_chunks: int = 32, alpha: float = 0.4) -> n
 
 def estimate_sgvb_psd(time_series, sampling_frequency, duration=4,
                       minimum_frequency = 20.0, maximum_frequency = 896.0,
-                      N_theta=6000, nchunks=32, ntrain_map=10000,
+                      N_theta=6500, nchunks=32, ntrain_map=10000,
                       N_samples=500, degree_fluctuate=8000, seed=None,
                       tukey_roll_off = 0.4):
     
@@ -223,7 +223,7 @@ def estimate_sgvb_psd(time_series, sampling_frequency, duration=4,
         n_elbo_maximisation_steps=600,
         frange=frange
     )
-    psd_est.run(lr=0.0078)
+    psd_est.run(lr=0.0075)
     freqs = psd_est.freq
     psd = psd_est.pointwise_ci[1]
     psd = psd*2 / Ew**2

@@ -255,18 +255,11 @@ def run_pe_study(
     injection_params = inj_prior.sample()
     injection_params['geocent_time'] = 2.0
 
-    injections_h5 = os.path.join(outdir_, "injection_parameters.h5")
-    os.makedirs(os.path.dirname(injections_h5), exist_ok=True)
-    with h5py.File(injections_h5, "a") as hf:
-        group_name = f"seed_{seed}"
-        if group_name in hf:
-            del hf[group_name]
-        grp = hf.create_group(group_name)
+    injections_h5 = os.path.join(outdir, f"seed_{seed}_injection_parameters.h5")
+    with h5py.File(injections_h5, "w") as hf:
         for key, value in injection_params.items():
-            try:
-                grp.attrs[key] = float(value)
-            except (TypeError, ValueError):
-                grp.attrs[key] = str(value)
+            dataset = hf.create_dataset(key, data=[value])
+            dataset.attrs["name"] = key
 
     analysis_prior = bilby.gw.prior.BBHPriorDict()
     analysis_prior["geocent_time"] = bilby.core.prior.Uniform(
@@ -481,24 +474,33 @@ def run_pe_study(
         duration=duration,
     )
 
-    csv_path = os.path.join(outdir_, "log_evidence_summary.csv")
-    header = (
-        "seed,"
-        "sgvb_log_evidence,sgvb_log_noise_evidence,sgvb_log_bayes_factor,sgvb_optimal_snr,"
-        "welch_log_evidence,welch_log_noise_evidence,welch_log_bayes_factor,welch_optimal_snr\n"
-    )
-    if not os.path.exists(csv_path):
-        with open(csv_path, "w") as csv_file:
-            csv_file.write(header)
+    csv_path = os.path.join(outdir, f"seed_{seed}_results.csv")
+    header = [
+        "seed",
+        "sgvb_log_evidence",
+        "sgvb_log_noise_evidence",
+        "sgvb_log_bayes_factor",
+        "sgvb_optimal_snr",
+        "welch_log_evidence",
+        "welch_log_noise_evidence",
+        "welch_log_bayes_factor",
+        "welch_optimal_snr",
+    ]
+    values = [
+        f"{seed}",
+        f"{logz_corrected['sgvb']['log_evidence']:.2f}",
+        f"{logz_corrected['sgvb']['log_noise_evidence']:.2f}",
+        f"{logz_corrected['sgvb']['log_bayes_factor']:.2f}",
+        f"{optimal_snrs['sgvb']:.2f}",
+        f"{logz_corrected['welch']['log_evidence']:.2f}",
+        f"{logz_corrected['welch']['log_noise_evidence']:.2f}",
+        f"{logz_corrected['welch']['log_bayes_factor']:.2f}",
+        f"{optimal_snrs['welch']:.2f}",
+    ]
 
-    with open(csv_path, "a") as csv_file:
-        sgvb = logz_corrected["sgvb"]
-        welch = logz_corrected["welch"]
-        csv_file.write(
-            f"{seed},"
-            f"{sgvb['log_evidence']:.2f},{sgvb['log_noise_evidence']:.2f},{sgvb['log_bayes_factor']:.2f},{optimal_snrs['sgvb']:.2f},"
-            f"{welch['log_evidence']:.2f},{welch['log_noise_evidence']:.2f},{welch['log_bayes_factor']:.2f},{optimal_snrs['welch']:.2f}\n"
-        )
+    with open(csv_path, "w") as csv_file:
+        csv_file.write(",".join(header) + "\n")
+        csv_file.write(",".join(values) + "\n")
     
     
     return results, meta
@@ -512,10 +514,6 @@ if __name__ == '__main__':
         seed = int(args[0])
         
     run_pe_study(seed=seed)
-
-
-
-
 
 
 

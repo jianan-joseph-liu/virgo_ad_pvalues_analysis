@@ -193,7 +193,7 @@ def window_in_chunks(x: np.ndarray, n_chunks: int = 32, alpha: float = 0.4) -> n
 
 def estimate_sgvb_psd(time_series, sampling_frequency, duration=4,
                       minimum_frequency = 20.0, maximum_frequency = 896.0,
-                      N_theta=6500, nchunks=32, ntrain_map=10000,
+                      N_theta=6000, nchunks=32, ntrain_map=10000,
                       N_samples=500, degree_fluctuate=8000, seed=None,
                       tukey_roll_off = 0.4):
     
@@ -479,8 +479,8 @@ def run_pe_study(
     csv_path = os.path.join(outdir_, "log_evidence_summary.csv")
     header = (
         "seed,"
-        "sgvb_log_evidence,sgvb_log_noise_evidence,sgvb_log_bayes_factor, sgvb_optimal_snr,"
-        "welch_log_evidence,welch_log_noise_evidence,welch_log_bayes_factor, welch_optimal_snr,"
+        "sgvb_log_evidence,sgvb_log_noise_evidence,sgvb_log_bayes_factor,sgvb_optimal_snr,"
+        "welch_log_evidence,welch_log_noise_evidence,welch_log_bayes_factor,welch_optimal_snr\n"
     )
     if not os.path.exists(csv_path):
         with open(csv_path, "w") as csv_file:
@@ -492,7 +492,7 @@ def run_pe_study(
         csv_file.write(
             f"{seed},"
             f"{sgvb['log_evidence']:.2f},{sgvb['log_noise_evidence']:.2f},{sgvb['log_bayes_factor']:.2f},{optimal_snrs['sgvb']:.2f},"
-            f"{welch['log_evidence']:.2f},{welch['log_noise_evidence']:.2f},{welch['log_bayes_factor']:.2f},{optimal_snrs['welch']:.2f},"
+            f"{welch['log_evidence']:.2f},{welch['log_noise_evidence']:.2f},{welch['log_bayes_factor']:.2f},{optimal_snrs['welch']:.2f}\n"
         )
     
     

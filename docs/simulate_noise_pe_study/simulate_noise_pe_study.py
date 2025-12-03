@@ -331,6 +331,11 @@ def run_pe_study(
         freqs_welch, welch_psd = estimate_welch_psd(off_source, sampling_frequency_local)
         freqs_sgvb, sgvb_psd = estimate_sgvb_psd(off_source, sampling_frequency_local)
 
+        if np.any(np.isnan(welch_psd)):
+            raise ValueError("Welch PSD contains NaN values; aborting run.")
+        if np.any(np.isnan(sgvb_psd)):
+            raise ValueError("SGVB PSD contains NaN values; aborting run.")
+
         psd_estimates['welch'] = (freqs_welch, welch_psd)
         psd_estimates['sgvb'] = (freqs_sgvb, sgvb_psd)
 
@@ -507,8 +512,6 @@ if __name__ == '__main__':
         seed = int(args[0])
         
     run_pe_study(seed=seed)
-
-
 
 
 

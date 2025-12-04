@@ -282,13 +282,21 @@ def run_pe_study(
     cache_dir = _ensure_cache_dir()
 
     for ifo in noise_ifos:
-        noise_strain = ifo.strain_data.time_domain_strain
         cache_path = os.path.join(cache_dir, f"{label}_{ifo.name}_noise.npz")
-        np.savez_compressed(
-            cache_path,
-            strain=noise_strain,
-            dt=1/sampling_frequency_local
-        )
+        if os.path.exists(cache_path):
+            cached = np.load(cache_path)
+            noise_strain = np.asarray(cached["strain"], dtype=float)
+            dt = float(cached["dt"])
+            print(f"Loaded cached simulated noise for {ifo.name} from {cache_path}")
+            
+        else:
+            print(f"Saving noise for {ifo.name} to {cache_path}")
+            noise_strain = ifo.strain_data.time_domain_strain
+            np.savez_compressed(
+                cache_path,
+                strain=noise_strain,
+                dt=1/sampling_frequency_local
+            )
 
         off_samples = int(duration * 32 * sampling_frequency_local)
         off_source_data = noise_strain[:off_samples]

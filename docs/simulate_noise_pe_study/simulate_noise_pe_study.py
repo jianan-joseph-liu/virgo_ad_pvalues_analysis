@@ -348,7 +348,10 @@ def run_pe_study(
             sgvb_psd=sgvb_psd
         )
         print(f"Cached PSDs to {psd_cache_path}")
-
+        
+    freqs_welch, welch_psd = psd_estimates['welch']
+    freqs_sgvb,  sgvb_psd  = psd_estimates['sgvb']
+    
     # plot the two PSDs for comparison along with on-source data
     freqs_true = noise_ifos[0].power_spectral_density.frequency_array
     true_psd = noise_ifos[0].power_spectral_density.psd_array

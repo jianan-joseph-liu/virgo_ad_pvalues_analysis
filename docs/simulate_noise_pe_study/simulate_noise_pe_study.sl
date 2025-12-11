@@ -6,8 +6,8 @@
 #SBATCH --time=10:30:00                
 #SBATCH --partition=skylake
 #SBATCH --array=1-100
-#SBATCH --output=logs_1/pe_%A_%a.out
-#SBATCH --error=logs_1/pe_%A_%a.err
+#SBATCH --output=logs/pe_%A_%a.out
+#SBATCH --error=logs/pe_%A_%a.err
         
 
 module load python-scientific/3.10.4-foss-2022a

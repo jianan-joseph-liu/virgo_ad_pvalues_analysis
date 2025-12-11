@@ -242,7 +242,7 @@ def run_pe_study(
 ):
     bilby.core.utils.random.seed(seed)
     label = f"seed_{seed}"
-    outdir = f"outdir_simulate_pe_study/seed_{seed}"
+    outdir = f"outdir_simulate_pe_study_1/seed_{seed}"
     os.makedirs(outdir, exist_ok=True)
 
     print(">>>> Running PE study with seed =", seed, " <<<<")

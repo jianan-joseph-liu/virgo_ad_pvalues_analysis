@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 LOGGER = bilby.core.utils.logger
 
 BASE_DIR = Path(__file__).resolve().parent
-PSD_DIR = BASE_DIR / "psd_data"
+PSD_DIR = BASE_DIR / "ar_psd_data"
 CACHE_DIR = BASE_DIR / "data_cache"
 
 TRIGGER_TIME = 1126259462.4

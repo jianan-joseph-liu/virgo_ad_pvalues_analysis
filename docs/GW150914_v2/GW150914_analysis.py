@@ -4,7 +4,7 @@ GW150914 analysis using bilby
 
 python GW150914_analysis.py --psd bayeswave
 python GW150914_analysis.py --psd welch
-python GW150914_analysis.py --psd sgvb
+python GW150914_analysis.py --psd ar_sgvb
 """
 import argparse
 import sys
@@ -19,8 +19,8 @@ import os
 
 parser = argparse.ArgumentParser(
     description="Run GW150914 analysis with specified PSD.")
-parser.add_argument('--psd', type=str, choices=['bayeswave', 'welch', 'sgvb'], required=True,
-                    help='PSD to use for the analysis: dynesty or bayeswave, welch, sgvb')
+parser.add_argument('--psd', type=str, choices=['bayeswave', 'welch', 'ar_sgvb'], required=True,
+                    help='PSD to use for the analysis: dynesty or bayeswave, welch, ar_sgvb')
 args = parser.parse_args()
 
 # NPOOL IS OBTAINED FROM ENVIRONMENT VARIABLE SET BY SLURM
@@ -49,10 +49,10 @@ elif args.psd == 'welch':
         "H1": "psd_data/welch_h1_psd.txt",
         "L1": "psd_data/welch_l1_psd.txt",
     }
-elif args.psd == 'sgvb':
+elif args.psd == 'ar_sgvb':
     psd_files = {
-        "H1": "psd_data/sgvb_h1_psd.txt",
-        "L1": "psd_data/sgvb_l1_psd.txt",
+        "H1": "psd_data/ar_sgvb_h1_psd.txt",
+        "L1": "psd_data/ar_sgvb_l1_psd.txt",
     }
 # END OF NEW ADDITION
 

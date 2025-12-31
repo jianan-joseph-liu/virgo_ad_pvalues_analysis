@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Generate Welch and SGVB PSD estimates for GW150914 data."""
+"""Generate Welch and AR_SGVB PSD estimates for GW150914 data."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict, Tuple
-
+from spectrum import aryule, arma2psd
 import bilby
 import numpy as np
 from gwpy.timeseries import TimeSeries
@@ -39,12 +39,12 @@ PSD_END_TIME = ANALYSIS_START_TIME
 PSD_START_TIME = PSD_END_TIME - PSD_DURATION
 
 SGVB_SETTINGS = {
-    "N_theta": 6000,
+    "N_theta": 2000,
     "nchunks": 32,
     "ntrain_map": 10000,
     "N_samples": 500,
     "degree_fluctuate": 8000,
-    "lr": 0.008,
+    "lr": 0.015,
     "max_hyperparm_eval": 1,
     "n_elbo_maximisation_steps": 600,
 }
@@ -125,18 +125,47 @@ def window_in_chunks(x: np.ndarray, n_chunks: int, alpha: float) -> np.ndarray:
     return tapered.reshape(-1)
 
 
-def estimate_sgvb_psd(ts: TimeSeries, sample_rate: float) -> Tuple[np.ndarray, np.ndarray]:
+def whiten_by_ar_psd_rfft_chunks(x_1d, ar_psd, fs, nchunks):
+    x_1d = np.asarray(x_1d)
+
+    segN = x_1d.size // nchunks
+    X = x_1d.reshape(nchunks, segN)
+
+    out = np.empty_like(X)
+
+    scale = np.sqrt(fs * segN)
+
+    for i in range(nchunks):
+        V_f = np.fft.rfft(X[i])[1:-1] / scale
+        wh_f = V_f / np.sqrt(ar_psd)
+        out[i] = np.fft.irfft(wh_f * scale, n=segN)
+
+    return out.reshape(-1)
+
+
+def estimate_ar_sgvb_psd(ts: TimeSeries, sample_rate: float) -> Tuple[np.ndarray, np.ndarray]:
     config = dict(SGVB_SETTINGS)
     n_samples_segment = int(round(DURATION * sample_rate))
     tukey_alpha = 2 * ROLL_OFF / DURATION
     window = tukey(n_samples_segment, tukey_alpha)
     ew = np.sqrt(np.mean(window**2))
 
-    data = window_in_chunks(ts.value, config["nchunks"], tukey_alpha)
-    data = np.asarray(data).reshape(-1, 1)
+    data_win = window_in_chunks(ts.value, 1, tukey_alpha)
+    chunked_win_data = window_in_chunks(ts.value, config["nchunks"], tukey_alpha)
 
+    # --- AR ---
+    ar, variance, _ = aryule(data_win, 500)
+    ar_PSD = arma2psd(ar, B=None, rho=variance, T=sample_rate, 
+                      NFFT=n_samples_segment, norm=False)[1:n_samples_segment//2]
+
+    # --- whitening---
+    import_cleaned_data = whiten_by_ar_psd_rfft_chunks(chunked_win_data, ar_PSD, 
+                                                       sample_rate, config["nchunks"])
+    import_cleaned_data = import_cleaned_data[:, np.newaxis]
+
+    # --- SGVB ---
     estimator = PSDEstimator(
-        x=data,
+        x=import_cleaned_data,
         N_theta=config["N_theta"],
         nchunks=config["nchunks"],
         ntrain_map=config["ntrain_map"],
@@ -150,8 +179,16 @@ def estimate_sgvb_psd(ts: TimeSeries, sample_rate: float) -> Tuple[np.ndarray, n
     estimator.run(lr=config["lr"])
     freq = np.asarray(estimator.freq)
     psd = np.asarray(estimator.pointwise_ci[1])
-    psd = np.real(psd[:, 0, 0]) * 2 / (ew**2)
-    return freq, psd
+    sgvb_psd = np.real(psd[:, 0, 0]) * 2 / (ew**2)
+
+    # --- final PSD ---
+    f = np.fft.rfftfreq(n_samples_segment, 1.0 / sample_rate)
+    frequency = f[1:-1]
+    mask_band = (MINIMUM_FREQUENCY <= frequency) & (frequency <= MAXIMUM_FREQUENCY)
+    ar_band = ar_PSD[mask_band]
+    final_psd = ar_band * sgvb_psd
+
+    return freq, final_psd
 
 
 def compute_periodogram(ts: TimeSeries) -> Tuple[np.ndarray, np.ndarray]:
@@ -172,20 +209,42 @@ def save_psd(path: Path, freq: np.ndarray, psd: np.ndarray) -> None:
     LOGGER.info("Saved PSD data to %s", path)
 
 
+def load_txt_psd(path: Path) -> Tuple[np.ndarray, np.ndarray]:
+    data = np.loadtxt(path)
+    return data[:, 0], data[:, 1]
+
+
+def load_bayeswave_psd(detector: str) -> Tuple[np.ndarray, np.ndarray] | None:
+    path = PSD_DIR / f"bayeswave_{detector.lower()}_psd.txt"
+    if not path.exists():
+        LOGGER.warning("BayesWave PSD not found: %s", path)
+        return None
+    freq, psd = load_txt_psd(path)
+    return bandlimit_psd(freq, psd, MINIMUM_FREQUENCY, MAXIMUM_FREQUENCY)
+
+
 def plot_psd_comparison(
     detector: str,
     periodogram: Tuple[np.ndarray, np.ndarray],
     welch: Tuple[np.ndarray, np.ndarray],
-    sgvb: Tuple[np.ndarray, np.ndarray],
+    ar_sgvb: Tuple[np.ndarray, np.ndarray],
+    bayeswave: Tuple[np.ndarray, np.ndarray],
 ) -> None:
     freq_periodogram, psd_periodogram = periodogram
     freq_welch, psd_welch = welch
-    freq_sgvb, psd_sgvb = sgvb
+    freq_sgvb, psd_ar_sgvb = ar_sgvb
+    freq_bw, psd_bw = bayeswave
 
     plt.figure(figsize=(8, 5))
-    plt.loglog(freq_periodogram, psd_periodogram, label="Periodogram", color="0.6", lw=1)
-    plt.loglog(freq_welch, psd_welch, label="Welch", lw=1)
-    plt.loglog(freq_sgvb, psd_sgvb, label="SGVB", lw=1)
+    plt.loglog(freq_periodogram, psd_periodogram,
+           label="Periodogram", color="0.6", alpha=0.5, lw=1)
+    plt.loglog(freq_welch, psd_welch,
+               label="Welch", color="blue", alpha=0.5, lw=1)    
+    plt.loglog(freq_sgvb, psd_ar_sgvb,
+               label="AR SGVB", color="red", alpha=1.0, lw=1)    
+    plt.loglog(freq_bw, psd_bw,
+               label="BayesWave", color="black", alpha=0.5, lw=1)
+    
     plt.xlim(MINIMUM_FREQUENCY, MAXIMUM_FREQUENCY)
     plt.xlabel("Frequency [Hz]")
     plt.ylabel(r"PSD [$1/\mathrm{Hz}$]")
@@ -209,23 +268,25 @@ def main() -> Dict[str, Dict[str, Tuple[np.ndarray, np.ndarray]]]:
         sample_rate = _get_sample_rate(ts)
 
         welch_freq, welch_psd = estimate_welch_psd(ts)
-        sgvb_freq, sgvb_psd = estimate_sgvb_psd(ts, sample_rate)
+        sgvb_freq, ar_sgvb_psd = estimate_ar_sgvb_psd(ts, sample_rate)
+        bayeswave = load_bayeswave_psd(detector)
         periodogram = compute_periodogram(ts)
 
         welch_freq, welch_psd = bandlimit_psd(welch_freq, welch_psd, MINIMUM_FREQUENCY, MAXIMUM_FREQUENCY)
-        sgvb_freq, sgvb_psd = bandlimit_psd(sgvb_freq, sgvb_psd, MINIMUM_FREQUENCY, MAXIMUM_FREQUENCY)
+        sgvb_freq, ar_sgvb_psd = bandlimit_psd(sgvb_freq, ar_sgvb_psd, MINIMUM_FREQUENCY, MAXIMUM_FREQUENCY)
         periodogram = (
             bandlimit_psd(periodogram[0], periodogram[1], MINIMUM_FREQUENCY, MAXIMUM_FREQUENCY)
         )
 
         save_psd(PSD_DIR / f"welch_{detector.lower()}_psd.txt", welch_freq, welch_psd)
-        save_psd(PSD_DIR / f"sgvb_{detector.lower()}_psd.txt", sgvb_freq, sgvb_psd)
+        save_psd(PSD_DIR / f"ar_sgvb_{detector.lower()}_psd.txt", sgvb_freq, ar_sgvb_psd)
 
-        plot_psd_comparison(detector, periodogram, (welch_freq, welch_psd), (sgvb_freq, sgvb_psd))
+        plot_psd_comparison(detector, periodogram, (welch_freq, welch_psd),
+                           (sgvb_freq, ar_sgvb_psd), bayeswave=bayeswave)
 
         results[detector] = {
             "welch": (welch_freq, welch_psd),
-            "sgvb": (sgvb_freq, sgvb_psd),
+            "ar_sgvb": (sgvb_freq, ar_sgvb_psd),
             "periodogram": periodogram,
         }
 

@@ -12,7 +12,7 @@ module load python-scientific/3.10.4-foss-2022a
 source /fred/oz303/jliu/virtual_evns/sgvb_venv/bin/activate
 
 # Define the array of PSD names
-PSD_NAMES=('bayeswave' 'welch' 'sgvb')
+PSD_NAMES=('bayeswave' 'welch' 'ar_sgvb')
 
 # Get the PSD name based on the array task ID
 PSD_NAME_TO_USE=${PSD_NAMES[$SLURM_ARRAY_TASK_ID]}

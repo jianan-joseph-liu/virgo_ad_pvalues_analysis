@@ -41,18 +41,18 @@ minimum_frequency = {"H1": 20, "L1": 20}
 label = args.psd
 if args.psd == 'bayeswave':
     psd_files = {
-        "H1": "psd_data/bayeswave_h1_psd.txt",
-        "L1": "psd_data/bayeswave_l1_psd.txt",
+        "H1": "ar_psd_data/bayeswave_h1_psd.txt",
+        "L1": "ar_psd_data/bayeswave_l1_psd.txt",
     }
 elif args.psd == 'welch':
     psd_files = {
-        "H1": "psd_data/welch_h1_psd.txt",
-        "L1": "psd_data/welch_l1_psd.txt",
+        "H1": "ar_psd_data/welch_h1_psd.txt",
+        "L1": "ar_psd_data/welch_l1_psd.txt",
     }
 elif args.psd == 'ar_sgvb':
     psd_files = {
-        "H1": "psd_data/ar_sgvb_h1_psd.txt",
-        "L1": "psd_data/ar_sgvb_l1_psd.txt",
+        "H1": "ar_psd_data/ar_sgvb_h1_psd.txt",
+        "L1": "ar_psd_data/ar_sgvb_l1_psd.txt",
     }
 # END OF NEW ADDITION
 

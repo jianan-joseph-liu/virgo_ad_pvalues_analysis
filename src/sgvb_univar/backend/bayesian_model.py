@@ -114,16 +114,10 @@ class BayesianModel:
         xγ = tf.matmul(self.data.Xmat_delta, tf.transpose(params[0], [0, 2, 1]))
         sum_xγ = -tf.reduce_sum(xγ, [1, 2])
         exp_xγ_inv = tf.exp(-xγ)
-
-
-        periodograms = tf.square(self.data.y_re) + tf.square(self.data.y_im)
-        n_seg = periodograms.shape[0]
-        periodo_mean = tf.reduce_mean(periodograms, axis=0, keepdims=True)
-        numerator = periodo_mean * n_seg
-
+        numerator = self.data.numerator
         internal = tf.multiply(numerator, exp_xγ_inv)
         tmp2_ = - tf.reduce_sum(internal, [-2, -1]) # sum over p_dim and freq
-        log_lik = tf.reduce_sum(sum_xγ * n_seg + tmp2_) # sum over all LnL
+        log_lik = tf.reduce_sum(sum_xγ * self.data.n_seg + tmp2_) # sum over all LnL
         return log_lik
 
     def logpost(self, params: List[tf.Variable]) -> tf.float32:
@@ -216,3 +210,13 @@ class BayesianModel:
             psd_scaling,
             fs,
         )
+
+
+
+
+
+
+
+
+
+

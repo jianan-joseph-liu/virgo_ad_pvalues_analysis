@@ -41,6 +41,10 @@ class AnalysisData:  # Parent used to create BayesianModel object
         y_ft = tf.convert_to_tensor(self.y_ft, dtype=tf.complex64)
         self.y_re = tf.math.real(y_ft)
         self.y_im = tf.math.imag(y_ft)
+        self.n_seg = self.y_re.shape[0]
+        periodograms = tf.square(self.y_re) + tf.square(self.y_im)
+        self.periodo_mean = tf.reduce_mean(periodograms, axis=0, keepdims=True)
+        self.numerator = self.periodo_mean * self.n_seg
         self.Xmat_delta = tf.convert_to_tensor(
             Xmat_delta, dtype=tf.float32
         )

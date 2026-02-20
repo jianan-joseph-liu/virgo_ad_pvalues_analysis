@@ -132,7 +132,7 @@ class PSDEstimator:
 
         # normalize the data
         self.psd_scaling = np.std(x)
-        self.psd_offset = np.mean(x)
+        self.psd_offset = 0.0
         self.x = (x - self.psd_offset) / self.psd_scaling
         self.n, self.p = x.shape
         if frange is None:

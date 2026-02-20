@@ -190,7 +190,7 @@ def compute_chunked_fft(x: np.ndarray, nchunks: int, frange: List[float], fs: fl
     chunked_x = x.reshape(nchunks, n_per_chunk, p)
 
     # Remove mean from each chunk
-    chunked_x -= np.mean(chunked_x, axis=1, keepdims=True)
+    #chunked_x -= np.mean(chunked_x, axis=1, keepdims=True)
 
     # FFT along time axis (axis=1)
     y_ft = np.fft.fft(chunked_x, axis=1) / np.sqrt(n_per_chunk)

@@ -21,9 +21,6 @@ class AnalysisData:  # Parent used to create BayesianModel object
         # Xmat:   basis matrix
         # Zar:    arry of design matrix Z_k for every freq k
         self.x = x
-        if x.shape[1] < 2:
-            #raise Exception("Time series should be at least 2 dimensional.")
-            x = np.column_stack((x, x))
         self.p = x.shape[1]
         self.nchunks = nchunks
         self.N_theta = N_theta

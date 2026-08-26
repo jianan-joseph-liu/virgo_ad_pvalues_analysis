@@ -18,9 +18,11 @@ class BayesianModel:
             data: AnalysisData,
             degree_fluctuate: float = None,
             init_params: List[tf.Variable] = None,
+            Nbw: float = 1.0,
     ):
 
         self.data = data
+        self.Nbw = tf.convert_to_tensor(Nbw, dtype=tf.float32)
 
         if degree_fluctuate is None:
             degree_fluctuate = data.N_delta / 2
@@ -118,7 +120,7 @@ class BayesianModel:
         internal = tf.multiply(numerator, exp_xγ_inv)
         tmp2_ = - tf.reduce_sum(internal, [-2, -1]) # sum over p_dim and freq
         log_lik = tf.reduce_sum(sum_xγ * self.data.n_seg + tmp2_) # sum over all LnL
-        return log_lik
+        return log_lik / self.Nbw
 
     def logpost(self, params: List[tf.Variable]) -> tf.float32:
         return self.loglik(params) + self.logprior(params)

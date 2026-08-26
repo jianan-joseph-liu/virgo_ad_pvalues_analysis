@@ -18,7 +18,8 @@ def test_end_to_end(plot_dir):
         nchunks=1,
         fs=data.fs,
     )
-    psd_all, pointwise_ci = psd_estimator.run(lr=0.01)
+    psd_all, pointwise_ci, uniform_ci = psd_estimator.run(lr=0.01)
+    assert uniform_ci.shape == pointwise_ci.shape
 
     # plot results
     fig, ax = plt.subplots()
@@ -58,7 +59,8 @@ def test_lvk(plot_dir):
         fs=lvk_data.fs,
         frange=[20, 2048],
     )
-    psd_all, pointwise_ci = psd_estimator.run(lr=0.03)
+    psd_all, pointwise_ci, uniform_ci = psd_estimator.run(lr=0.03)
+    assert uniform_ci.shape == pointwise_ci.shape
 
     # plot results
     fig, ax = plt.subplots(figsize=(8, 5))

@@ -26,6 +26,7 @@ class ViRunner:
             degree_fluctuate:float=None,
             init_params:List[tf.Tensor]=None,
             surrogate_posterior:tfd.JointDistributionSequential=None,
+            Nbw:float=1.0,
     ):
         self.data = AnalysisData(
             x=x,
@@ -41,6 +42,7 @@ class ViRunner:
             self.data,
             degree_fluctuate=degree_fluctuate,
             init_params=init_params,
+            Nbw=Nbw,
         )
         self.variation_factor = variation_factor
         if surrogate_posterior is not None:

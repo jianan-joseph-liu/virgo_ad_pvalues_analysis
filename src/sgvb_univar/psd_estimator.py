@@ -12,65 +12,10 @@ from .utils.utils import get_freq
 #from .postproc.plot_psd import plot_psd
 
 class PSDEstimator:
-    """
-    A class for estimating the posterior Power Spectral Density (PSD) using Stochastic Gradient Variational Bayes (SGVB).
+    """Estimate a univariate power spectral density with SGVB.
 
-    This class implements a two-step process:
-    1. Optimize the learning rate to maximize the posterior and Evidence Lower Bound (ELBO).
-    2. Use the optimized learning rate to estimate the posterior PSD.
-
-    The main interface is the run() method, which returns the posterior PSD and its quantiles.
-
-    :ivar N_theta: Number of basis functions for the theta component.
-    :vartype N_theta: int
-    :ivar N_samples: Number of parameters sampled from the surrogate distribution.
-    :vartype N_samples: int
-    :ivar nchunks: Number of blocks the multivariate time series is divided into.
-    :vartype nchunks: int
-    :ivar ntrain_map: Number of iterations in gradient ascent for Maximum A Posteriori (MAP) estimation.
-    :vartype ntrain_map: int
-    :ivar fs: Sampling frequency of the input data.
-    :vartype fs: float
-    :ivar lr_range: Range of learning rates to consider during optimization.
-    :vartype lr_range: tuple
-    :ivar psd_scaling: Scaling factor for the input data.
-    :vartype psd_scaling: numpy.ndarray
-    :ivar psd_offset: Offset for the input data.
-    :vartype psd_offset: numpy.ndarray
-    :ivar x: Normalized input multivariate time series.
-    :vartype x: numpy.ndarray
-    :ivar n: Number of time points in the input data.
-    :vartype n: int
-    :ivar p: Number of variables in the multivariate time series.
-    :vartype p: int
-    :ivar fmax_for_analysis: Maximum frequency in the frequency domain to be analyzed.
-    :vartype fmax_for_analysis: int
-    :ivar pdgrm: Periodogram of the input data.
-    :vartype pdgrm: numpy.ndarray
-    :ivar pdgrm_freq: Frequencies corresponding to the periodogram.
-    :vartype pdgrm_freq: numpy.ndarray
-    :ivar max_hyperparm_eval: Number of evaluations in hyperparameter optimization.
-    :vartype max_hyperparm_eval: int
-    :ivar degree_fluctuate: Hyperparameter from the prior, used when dealing with a large number of basis functions.
-    :vartype degree_fluctuate: float
-    :ivar model: Trained model object.
-    :vartype model: object
-    :ivar samps: Samples drawn from the posterior distribution.
-    :vartype samps: numpy.ndarray
-    :ivar vi_losses: Variational Inference losses during training.
-    :vartype vi_losses: numpy.ndarray
-    :ivar psd_quantiles: Quantiles of the estimated PSD.
-    :vartype pointwise_ci: numpy.ndarray
-    :ivar psd_all: All estimated PSDs.
-    :vartype psd_all: numpy.ndarray
-    :ivar inference_runner: Object for running the variational inference.
-    :vartype inference_runner: ViRunner
-    :ivar optimal_lr: Optimized learning rate.
-    :vartype optimal_lr: float
-    :ivar runtimes: Runtime of the different steps in the estimation process.
-    :vartype runtimes: dict
-    :ivar n_elbo_maximisation_steps: Number of steps for maximising the ELBO.
-    :vartype n_elbo_maximisation_steps: int
+    Call :meth:`run` to fit the model and populate ``psd_all``,
+    ``pointwise_ci``, and ``uniform_ci``.
     """
 
     def __init__(
@@ -88,34 +33,40 @@ class PSDEstimator:
             lr_range=(0.002, 0.02),
             n_elbo_maximisation_steps=500,
             init_params=None,
+            Nbw=1.0,
     ):
-        """
-        Initialize the PSDEstimator.
+        """Initialize the estimator.
 
-        :param x: Input multivariate time series of shape: (nsamp, p).
-        :type x: numpy.ndarray
-        :param N_theta: Number of basis functions for the theta component, defaults to 30.
-        :type N_theta: int, optional
-        :param nchunks: Number of blocks to divide the multivariate time series into, defaults to 1.
-        :type nchunks: int, optional
-        :param ntrain_map: Number of iterations in gradient ascent for MAP, defaults to 10000.
-        :type ntrain_map: int, optional
-        :param N_samples: Number of parameters sampled from the surrogate distribution, defaults to 500.
-        :type N_samples: int, optional
-        :param fs: Sampling frequency, defaults to 1.0.
-        :type fs: float, optional
-        :param max_hyperparm_eval: Number of evaluations in hyperparameter optimization, defaults to 100.
-        :type max_hyperparm_eval: int, optional
-        :param fmax_for_analysis: Maximum frequency to analyze in the frequency domain, defaults to None.
-        :type fmax_for_analysis: int, optional
-        :param degree_fluctuate: Hyperparameter from the prior, defaults to None.
-        :type degree_fluctuate: float, optional
-        :param seed: Random seed for reproducibility, defaults to None.
-        :type seed: int, optional
-        :param lr_range: Range of learning rates to consider during optimization, defaults to (0.002, 0.02).
-        :type lr_range: tuple, optional
-        :param n_elbo_maximisation_steps: Number of steps for maximizing the ELBO, defaults to 1000.
-        :type n_elbo_maximisation_steps: int, optional
+        Parameters
+        ----------
+        x : numpy.ndarray
+            Real time series with shape ``(n_samples, 1)``.
+        N_theta : int, default=30
+            Number of spline basis functions.
+        nchunks : int, default=1
+            Number of non-overlapping blocks used by the likelihood.
+        ntrain_map : int, default=5000
+            Number of MAP optimization steps.
+        N_samples : int, default=500
+            Number of draws from the variational posterior.
+        fs : float, default=1.0
+            Sampling frequency in Hz.
+        max_hyperparm_eval : int, default=100
+            Maximum learning-rate evaluations when ``run(lr=None)``.
+        frange : sequence of float or None, default=None
+            Analysis range ``[fmin, fmax]`` in Hz.
+        degree_fluctuate : float or None, default=None
+            Prior smoothness hyperparameter.
+        seed : int or None, default=None
+            Random seed.
+        lr_range : tuple of float, default=(0.002, 0.02)
+            Learning-rate search interval.
+        n_elbo_maximisation_steps : int, default=500
+            Number of ELBO optimization steps.
+        init_params : list or None, default=None
+            Optional initial model parameters.
+        Nbw : float, default=1.0
+            Equivalent-noise-bandwidth factor dividing the block likelihood.
         """
 
         if seed is not None:
@@ -126,6 +77,9 @@ class PSDEstimator:
         self.nchunks = nchunks
         self.ntrain_map = ntrain_map
         self.n_elbo_maximisation_steps = n_elbo_maximisation_steps
+        if not np.isfinite(Nbw) or Nbw <= 0:
+            raise ValueError("Nbw must be a positive finite number")
+        self.Nbw = float(Nbw)
 
         self.fs = fs
         self.lr_range = lr_range
@@ -181,6 +135,7 @@ class PSDEstimator:
             degree_fluctuate=self.degree_fluctuate,
             fs=self.fs,
             init_params=init_params,
+            Nbw=self.Nbw,
         )
 
     def _learning_rate_optimisation_objective(self, lr):
@@ -237,8 +192,8 @@ class PSDEstimator:
 
         :param lr: Learning rate for MAP. If None, optimal rate is found, defaults to None.
         :type lr: float, optional
-        :return: Tuple containing the posterior PSD and pointwise, and uniform quantiles of the PSD.
-        :rtype: tuple(numpy.ndarray, numpy.ndarray)
+        :return: Tuple containing all posterior PSD draws, pointwise CI, and uniform CI.
+        :rtype: tuple(numpy.ndarray, numpy.ndarray, numpy.ndarray)
         """
         times = {}
 
@@ -259,11 +214,11 @@ class PSDEstimator:
         #logger.info(f"Model trained in {times['train']:.2f}s")
 
         #logger.info("Computing posterior PSDs")
-        self.psd_all, self.pointwise_ci = self.model.compute_psd(
+        self.psd_all, self.pointwise_ci, self.uniform_ci = self.model.compute_psd(
             self.samps, psd_scaling=self.psd_scaling, fs=self.fs
         )
         self.runtimes = times
-        return self.psd_all, self.pointwise_ci
+        return self.psd_all, self.pointwise_ci, self.uniform_ci
 
     @property
     def freq(self) -> np.ndarray:
@@ -404,5 +359,7 @@ class PSDEstimator:
         :rtype: np.ndarray
         """
         spline_params = self.inference_runner.surrogate_posterior.sample(n_samples)
-        psd, pointwise_ci =  self.model.compute_psd(spline_params, psd_scaling=self.psd_scaling, fs=self.fs)
+        psd, _, _ = self.model.compute_psd(
+            spline_params, psd_scaling=self.psd_scaling, fs=self.fs
+        )
         return spline_params, psd

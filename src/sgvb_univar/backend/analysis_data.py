@@ -30,7 +30,12 @@ class AnalysisData:  # Parent used to create BayesianModel object
         self.frange = frange
 
         # Compute the required datasets
-        self.y_ft, self.freq = compute_chunked_fft(self.x, self.nchunks, self.frange, self.fs)
+        self.y_ft, self.freq = compute_chunked_fft(
+            self.x,
+            self.nchunks,
+            self.frange,
+            self.fs,
+        )
         self.Zar = _compute_chunked_Zmatrix(self.y_ft)
         Xmat_delta, Xmat_theta = _compute_Xmatrices(self.freq, N_delta, N_theta)
 
@@ -149,7 +154,12 @@ def DR_basis(freq: np.ndarray, N=10):
     ).T
 
 
-def compute_chunked_fft(x: np.ndarray, nchunks: int, frange: List[float], fs: float) -> Tuple[np.ndarray, np.ndarray]:
+def compute_chunked_fft(
+        x: np.ndarray,
+        nchunks: int,
+        frange: List[float],
+        fs: float
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Compute the FFT of input data split into chunks, discard DC component, and retain only
     the positive frequencies within the specified frequency range.
@@ -164,7 +174,6 @@ def compute_chunked_fft(x: np.ndarray, nchunks: int, frange: List[float], fs: fl
         Frequency range [fmin, fmax] to retain after FFT (in Hz).
     fs : float
         Sampling frequency (Hz).
-
     Returns:
     -------
     y_ft : np.ndarray
